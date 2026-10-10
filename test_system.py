@@ -123,8 +123,9 @@ try:
     }, timeout=30)
     data = r.json()
     test("AI 查价成功", r.status_code == 200, str(data)[:100])
-    test("返回 new_price", "new_price" in data, "")
-    test("价格是数字", isinstance(data.get("new_price"), (int, float)), "")
+    test("返回 new 平台价格", "new" in data and "amazon" in data.get("new", {}), "")
+    test("返回 used 平台价格", "used" in data and "mercari" in data.get("used", {}), "")
+    test("价格是数字", isinstance(data.get("new", {}).get("amazon", {}).get("price"), (int, float)), "")
 except Exception as e:
     test("AI 查价成功", False, str(e))
 
@@ -207,7 +208,7 @@ try:
     test("有批量删除函数", "batchDelete" in html, "")
     test("有全选函数", "toggleSelectAll" in html, "")
     test("有 toast 提示", "showToast" in html, "")
-    test("有创建商品函数", "createFromSelection" in html, "")
+    test("有创建商品函数", "diagSave" in html, "")
 except Exception as e:
     test("页面 UI 检查", False, str(e))
 

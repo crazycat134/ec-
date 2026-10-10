@@ -1,0 +1,1144 @@
+{
+ "extVersion": "1.30.02",
+ "name": "mercari_listing",
+ "icon": "riGlobalLine",
+ "table": [],
+ "version": "1.30.02",
+ "drawflow": {
+  "nodes": [
+   {
+    "id": "aT-7UAiK0kTTybXPG259n",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 398.50720597376665,
+     "y": 30.425128029935365
+    },
+    "data": {
+     "active": true,
+     "customUserAgent": false,
+     "description": "",
+     "disableBlock": false,
+     "inGroup": false,
+     "tabZoom": 1,
+     "updatePrevTab": false,
+     "url": "https://jp.mercari.com/sell/create",
+     "userAgent": "",
+     "waitTabLoaded": false
+    },
+    "label": "new-tab"
+   },
+   {
+    "id": "iefbbd9",
+    "type": "BlockBasicWithFallback",
+    "initialized": false,
+    "position": {
+     "x": -59.179289898683464,
+     "y": 172.9378181207412
+    },
+    "data": {
+     "assignVariable": true,
+     "body": "{}",
+     "contentType": "json",
+     "dataColumn": "",
+     "dataPath": "data",
+     "description": "",
+     "disableBlock": false,
+     "headers": [
+      {
+       "name": "",
+       "value": ""
+      }
+     ],
+     "method": "GET",
+     "responseType": "json",
+     "saveData": false,
+     "settings": {
+      "blockTimeout": 0,
+      "debugMode": false
+     },
+     "timeout": 10000,
+     "url": "http://127.0.0.1:8765/api/products",
+     "variableName": "products"
+    },
+    "label": "webhook"
+   },
+   {
+    "id": "k8ah7bc",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 127.0363080345598,
+     "y": 46.173943403794254
+    },
+    "data": {
+     "description": "",
+     "disableBlock": false,
+     "elementSelector": "",
+     "fromNumber": 1,
+     "loopData": "[]",
+     "loopId": "item",
+     "loopThrough": "variable",
+     "maxLoop": "10",
+     "referenceKey": "",
+     "resumeLastWorkflow": false,
+     "reverseLoop": false,
+     "startIndex": "0",
+     "toNumber": 10,
+     "variableName": "products",
+     "waitForSelector": false,
+     "waitSelectorTimeout": 5000
+    },
+    "label": "loop-data"
+   },
+   {
+    "id": "8gfj1v2",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 1406.4211176235362,
+     "y": 737.743186521861
+    },
+    "data": {
+     "description": "",
+     "disableBlock": false,
+     "findBy": "cssSelector",
+     "markEl": false,
+     "multiple": false,
+     "selector": "[data-testid=\"category-link\"] .mer-spacing-y-8",
+     "waitForSelector": false,
+     "waitSelectorTimeout": 5000
+    },
+    "label": "event-click"
+   },
+   {
+    "id": "16ilgtm",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 1391.1889533740425,
+     "y": 981.382377618811
+    },
+    "data": {
+     "disableBlock": false,
+     "time": "100"
+    },
+    "label": "delay"
+   },
+   {
+    "id": "qinvkhj",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 422.50230162311766,
+     "y": 422.1657793873941
+    },
+    "data": {
+     "disableBlock": false,
+     "time": "1000"
+    },
+    "label": "delay"
+   },
+   {
+    "id": "m0ep5u6",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 454.1261380852402,
+     "y": 313.9127872621066
+    },
+    "data": {
+     "description": "",
+     "disableBlock": true,
+     "findBy": "cssSelector",
+     "markEl": false,
+     "multiple": false,
+     "selector": ".inputContainer__ae1855b0 > [type=\"checkbox\"]",
+     "waitForSelector": false,
+     "waitSelectorTimeout": 5000
+    },
+    "label": "event-click"
+   },
+   {
+    "id": "gxts4jk",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 428.3818595513028,
+     "y": 149.73938081257484
+    },
+    "data": {
+     "disableBlock": false,
+     "time": "2000"
+    },
+    "label": "delay"
+   },
+   {
+    "id": "3f69889",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 441.4012789238641,
+     "y": 564.9181157978724
+    },
+    "data": {
+     "code": "// 等待元素出现的辅助函数\nfunction waitForElement(selector, timeout = 10000) {\n    return new Promise((resolve, reject) => {\n        const start = Date.now();\n        const timer = setInterval(() => {\n            const el = document.querySelector(selector);\n            if (el) {\n                clearInterval(timer);\n                resolve(el);\n            } else if (Date.now() - start > timeout) {\n                clearInterval(timer);\n                reject(new Error('等待元素超时: ' + selector));\n            }\n        }, 200);\n    });\n}\n\n// 设置 React 输入框的值\nfunction setReactInputValue(element, value) {\n    if (!element) return false;\n    const proto = element.tagName === 'TEXTAREA'\n        ? window.HTMLTextAreaElement.prototype\n        : window.HTMLInputElement.prototype;\n    const setter = Object.getOwnPropertyDescriptor(proto, \"value\").set;\n    setter.call(element, value);\n    element.dispatchEvent(new Event('input', { bubbles: true }));\n    element.dispatchEvent(new Event('change', { bubbles: true }));\n    // 额外触发一次 React 常用的事件\n    element.dispatchEvent(new Event('blur', { bubbles: true }));\n    return true;\n}\n\n(async () => {\n    try {\n        console.log('=== 开始填写商品信息 ===');\n\n        // 1. 获取 Automa 变量\n        const products = automaRefData('variables', 'products');\n        const currentIndex = automaRefData('loopData', 'item.$index');\n        console.log('products 长度:', products ? products.length : 'null');\n        console.log('currentIndex:', currentIndex);\n\n        const currentProduct = products && products[currentIndex];\n        if (!currentProduct) {\n            console.error('未找到当前商品数据，currentProduct 为空');\n            return;\n        }\n        console.log('当前商品:', currentProduct.title);\n\n        // 2. 等待输入框出现\n        const titleInput = await waitForElement('input[name=\"name\"]');\n        const descInput = await waitForElement('textarea[name=\"description\"]');\n        const priceInput = await waitForElement('input[name=\"price\"]');\n        console.log('输入框已找到');\n\n        // 3. 填写\n        const ok1 = setReactInputValue(titleInput, currentProduct.title);\n        const ok2 = setReactInputValue(descInput, currentProduct.description);\n        const ok3 = setReactInputValue(priceInput, currentProduct.price);\n\n        console.log('填写结果: 标题=', ok1, '描述=', ok2, '价格=', ok3);\n\n        // 4. 额外：如果标题没填上，尝试用 execCommand 方式\n        if (titleInput.value !== currentProduct.title) {\n            console.warn('标题值不一致，尝试 execCommand 方式');\n            titleInput.focus();\n            titleInput.select();\n            document.execCommand('insertText', false, currentProduct.title);\n        }\n\n        console.log('=== 填写完成 ===');\n    } catch (e) {\n        console.error('执行出错:', e.message);\n    }\n})();",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "l94iemq",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 1671.4379885041706,
+     "y": 865.6516255057751
+    },
+    "data": {
+     "code": "// 1. 获取当前商品数据\nconst products = automaRefData('variables', 'products');\nconst currentIndex = automaRefData('loopData', 'item.$index');\nconst categories = products[currentIndex].categories; // 例如 [\"本・雑誌・漫画\", \"漫画\", \"少年漫画\"]\n\n// 2. 获取要点击的第一级分类文字\nconst targetText = categories[0]; // \"本・雑誌・漫画\"\n\n// 3. 精准查找包含该文字的按钮或链接（去除空格）\nconst elements = Array.from(document.querySelectorAll('a, button, div[role=\"button\"], li, div'));\nconst target = elements.find(el => el.textContent.trim() === targetText);\n\nif (target) {\n    target.click();\n    console.log('已点击第一级分类:', targetText);\n} else {\n    console.error('未找到第一级分类:', targetText);\n}",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "6jrqt3p",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 1992.3142747975414,
+     "y": 802.5145420740059
+    },
+    "data": {
+     "code": "const products = automaRefData('variables', 'products');\nconst currentIndex = automaRefData('loopData', 'item.$index');\nconst categories = products[currentIndex].categories;\n\nconst targetText = categories[1]; // \"漫画\"\n\nconst elements = Array.from(document.querySelectorAll('a, button, div[role=\"button\"], li, div'));\nconst target = elements.find(el => el.textContent.trim() === targetText);\n\nif (target) {\n    target.click();\n    console.log('已点击第二级分类:', targetText);\n} else {\n    console.error('未找到第二级分类:', targetText);\n}",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "unmwiru",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 2195.702051373306,
+     "y": 958.03662950556
+    },
+    "data": {
+     "code": "const products = automaRefData('variables', 'products');\nconst currentIndex = automaRefData('loopData', 'item.$index');\nconst categories = products[currentIndex].categories;\n\nconst targetText = categories[2]; // \"少年漫画\"\n\nconst elements = Array.from(document.querySelectorAll('a, button, div[role=\"button\"], li, div'));\nconst target = elements.find(el => el.textContent.trim() === targetText);\n\nif (target) {\n    target.click();\n    console.log('已点击第三级分类:', targetText);\n} else {\n    console.error('未找到第三级分类:', targetText);\n}",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "cpfcad1",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 2426.286242235553,
+     "y": 852.4731397868771
+    },
+    "data": {
+     "code": "const products = automaRefData('variables', 'products');\nconst currentIndex = automaRefData('loopData', 'item.$index');\nconst categories = products[currentIndex].categories;\n\n// 判断是否有第4级分类\nif (categories && categories.length > 3) {\n    const targetText = categories[3]; // 第四级是索引 3\n    const elements = Array.from(document.querySelectorAll('a, button, div[role=\"button\"], li, div'));\n    const target = elements.find(el => el.textContent.trim() === targetText);\n\n    if (target) {\n        target.click();\n        console.log('已点击第四级分类:', targetText);\n    } else {\n        console.error('未找到第四级分类:', targetText);\n    }\n} else {\n    console.log('没有第四级分类，跳过');\n}",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "ovpj5sm",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 2580.7618753827765,
+     "y": 987.3673546478327
+    },
+    "data": {
+     "code": "const products = automaRefData('variables', 'products');\nconst currentIndex = automaRefData('loopData', 'item.$index');\nconst categories = products[currentIndex].categories;\n\n// 判断是否有第5级分类\nif (categories && categories.length > 4) {\n    const targetText = categories[4]; // 第五级是索引 4\n    const elements = Array.from(document.querySelectorAll('a, button, div[role=\"button\"], li, div'));\n    const target = elements.find(el => el.textContent.trim() === targetText);\n\n    if (target) {\n        target.click();\n        console.log('已点击第五级分类:', targetText);\n    } else {\n        console.error('未找到第五级分类:', targetText);\n    }\n} else {\n    console.log('没有第五级分类，跳过');\n}",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "xg2ucj3",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 3076.6924242828195,
+     "y": 902.835759552909
+    },
+    "data": {
+     "code": "const products = automaRefData('variables', 'products');\nconst currentIndex = automaRefData('loopData', 'item.$index');\nconst categories = products[currentIndex].categories;\n\n// 判断是否有第6级分类\nif (categories && categories.length > 5) {\n    const targetText = categories[5]; // 第六级是索引 5\n    const elements = Array.from(document.querySelectorAll('a, button, div[role=\"button\"], li, div'));\n    const target = elements.find(el => el.textContent.trim() === targetText);\n\n    if (target) {\n        target.click();\n        console.log('已点击第六级分类:', targetText);\n    } else {\n        console.error('未找到第六级分类:', targetText);\n    }\n} else {\n    console.log('没有第六级分类，跳过');\n}",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "rm1qksv",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 453.2758168096134,
+     "y": 693.7533633805921
+    },
+    "data": {
+     "description": "",
+     "disableBlock": false,
+     "findBy": "cssSelector",
+     "markEl": false,
+     "multiple": false,
+     "selector": "button[data-testid=\"save-draft\"]",
+     "waitForSelector": false,
+     "waitSelectorTimeout": 5000
+    },
+    "label": "event-click"
+   },
+   {
+    "id": "wanufkf",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 2829.596134866409,
+     "y": 799.4032786050046
+    },
+    "data": {
+     "disableBlock": false,
+     "time": 500
+    },
+    "label": "delay"
+   },
+   {
+    "id": "2q0q9e0",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 1794.1872107972454,
+     "y": 1030.894021608969
+    },
+    "data": {
+     "disableBlock": false,
+     "time": 500
+    },
+    "label": "delay"
+   },
+   {
+    "id": "dbxglgc",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 2186.631479760363,
+     "y": 672.6265808738705
+    },
+    "data": {
+     "disableBlock": false,
+     "time": 500
+    },
+    "label": "delay"
+   },
+   {
+    "id": "by7s2do",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 2335.486544707007,
+     "y": 1140.1329415820944
+    },
+    "data": {
+     "disableBlock": false,
+     "time": 500
+    },
+    "label": "delay"
+   },
+   {
+    "id": "d24q6zu",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 3267.326358556697,
+     "y": 750.4083278755695
+    },
+    "data": {
+     "disableBlock": false,
+     "time": 500
+    },
+    "label": "delay"
+   },
+   {
+    "id": "p65aqx1",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 2560.631452711957,
+     "y": 715.8274764258308
+    },
+    "data": {
+     "disableBlock": false,
+     "time": 500
+    },
+    "label": "delay"
+   },
+   {
+    "id": "4b4es23",
+    "type": "BlockLoopBreakpoint",
+    "initialized": false,
+    "position": {
+     "x": 471.8529086746231,
+     "y": 811.3617562489369
+    },
+    "data": {
+     "clearLoop": false,
+     "disableBlock": false,
+     "loopId": "item",
+     "settings": {
+      "blockTimeout": 1000,
+      "debugMode": false
+     }
+    },
+    "label": "loop-breakpoint"
+   },
+   {
+    "id": "6938fc0",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 1160.8336384672878,
+     "y": -45.96387267825896
+    },
+    "data": {
+     "active": true,
+     "customUserAgent": false,
+     "description": "",
+     "disableBlock": false,
+     "inGroup": false,
+     "tabZoom": 1,
+     "updatePrevTab": false,
+     "url": "https://jp.mercari.com/mypage/drafts",
+     "userAgent": "",
+     "waitTabLoaded": false
+    },
+    "label": "new-tab"
+   },
+   {
+    "id": "4v6ci2s",
+    "type": "BlockDelay",
+    "initialized": false,
+    "position": {
+     "x": 745.7587359291106,
+     "y": 559.012545491256
+    },
+    "data": {
+     "disableBlock": false,
+     "time": "1000"
+    },
+    "label": "delay"
+   },
+   {
+    "id": "h3316ru",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 1807.8512113331453,
+     "y": 113.48424403646173
+    },
+    "data": {
+     "code": "(async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n\n  // 读取已删除次数\n  let count = Number(sessionStorage.getItem('delCount') || 0);\n  if (count >= 10) {\n    console.log('已删除 10 次，停止');\n    sessionStorage.removeItem('delCount');\n    return;\n  }\n\n  // 等草稿列表出现\n  let firstDraft = null;\n  for (let k = 0; k < 50; k++) {\n    firstDraft = document.querySelector('a[data-testid=\"draft-item\"]');\n    if (firstDraft) break;\n    await sleep(200);\n  }\n\n  if (!firstDraft) {\n    console.log('NO_MORE_DRAFTS');\n    sessionStorage.removeItem('delCount');\n    return;\n  }\n\n  // 计数 +1，在跳转之前\n  sessionStorage.setItem('delCount', String(count + 1));\n  console.log(`第 ${count + 1} 次删除，草稿 ID:`, firstDraft.href);\n\n  location.href = firstDraft.href;\n})();",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "6stmwir",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 2279.9809633464906,
+     "y": 162.43778975213112
+    },
+    "data": {
+     "code": "(async () => {\n  const sleep = (ms) => new Promise(r => setTimeout(r, ms));\n\n  let deleteBtn = null;\n  for (let k = 0; k < 60; k++) {\n    deleteBtn = document.querySelector('[data-testid=\"delete-draft\"] button');\n    if (deleteBtn) break;\n    await sleep(200);\n  }\n  if (!deleteBtn) { console.error('找不到删除按钮'); return; }\n\n  deleteBtn.click();\n  await sleep(800);\n\n  const confirmBtn = Array.from(document.querySelectorAll('button'))\n    .find(b => (b.textContent || '').trim() === '削除する');\n  if (!confirmBtn) { console.error('找不到确认按钮'); return; }\n\n  confirmBtn.click();\n  await sleep(2000);\n\n  location.href = 'https://jp.mercari.com/mypage/drafts';\n})();",
+     "context": "website",
+     "description": "",
+     "disableBlock": false,
+     "everyNewTab": false,
+     "preloadScripts": [],
+     "runBeforeLoad": false,
+     "timeout": 20000
+    },
+    "label": "javascript-code"
+   },
+   {
+    "id": "tfe4twk",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 1510.8663673247509,
+     "y": 7.962156604907684
+    },
+    "data": {
+     "disableBlock": false,
+     "loopId": "vNgXiC",
+     "maxLoop": 0,
+     "toNumber": 10,
+     "fromNumber": 0,
+     "startIndex": 0,
+     "loopData": "[]",
+     "description": "",
+     "variableName": "",
+     "referenceKey": "",
+     "reverseLoop": false,
+     "elementSelector": "",
+     "waitForSelector": false,
+     "waitSelectorTimeout": 5000,
+     "resumeLastWorkflow": false,
+     "loopThrough": "numbers",
+     "settings": {
+      "blockTimeout": 0,
+      "debugMode": false
+     }
+    },
+    "label": "loop-data"
+   },
+   {
+    "id": "b85x0wd",
+    "type": "BlockLoopBreakpoint",
+    "initialized": false,
+    "position": {
+     "x": 2282.156676489409,
+     "y": 328.8798451854071
+    },
+    "data": {
+     "clearLoop": false,
+     "disableBlock": false,
+     "loopId": "vNgXiC"
+    },
+    "label": "loop-breakpoint"
+   },
+   {
+    "id": "7mq2uf6",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": 2011.2803901960383,
+     "y": 366.95482518648333
+    },
+    "data": {
+     "description": "",
+     "disableBlock": false,
+     "findBy": "cssSelector",
+     "markEl": false,
+     "multiple": false,
+     "selector": "[data-testid=\"dialog-action-button\"] > [type=\"button\"]",
+     "waitForSelector": false,
+     "waitSelectorTimeout": 5000
+    },
+    "label": "event-click"
+   },
+   {
+    "id": "2g1OWofGN01wgSNyKvefY",
+    "type": "BlockBasic",
+    "initialized": false,
+    "position": {
+     "x": -278.1305969346929,
+     "y": 310.71446847133694
+    },
+    "data": {
+     "activeInInput": false,
+     "contextMenuName": "",
+     "contextTypes": [],
+     "date": "",
+     "days": [],
+     "delay": 5,
+     "description": "",
+     "disableBlock": false,
+     "interval": 60,
+     "isUrlRegex": false,
+     "observeElement": {
+      "baseElOptions": {
+       "attributeFilter": [],
+       "attributes": false,
+       "characterData": false,
+       "childList": true,
+       "subtree": false
+      },
+      "baseSelector": "",
+      "matchPattern": "",
+      "selector": "",
+      "targetOptions": {
+       "attributeFilter": [],
+       "attributes": false,
+       "characterData": false,
+       "childList": true,
+       "subtree": false
+      }
+     },
+     "parameters": [],
+     "preferParamsInTab": false,
+     "shortcut": "",
+     "time": "00:00",
+     "type": "manual",
+     "url": ""
+    },
+    "label": "trigger"
+   }
+  ],
+  "edges": [
+   {
+    "id": "vueflow__edge-8gfj1v28gfj1v2-output-1-16ilgtm16ilgtm-input-1",
+    "type": "custom",
+    "source": "8gfj1v2",
+    "target": "16ilgtm",
+    "sourceHandle": "8gfj1v2-output-1",
+    "targetHandle": "16ilgtm-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 1622.408212927369,
+    "sourceY": 773.7249451593046,
+    "targetX": 1367.2047216226292,
+    "targetY": 1039.9552160108124
+   },
+   {
+    "id": "vueflow__edge-m0ep5u6m0ep5u6-output-1-qinvkhjqinvkhj-input-1",
+    "type": "custom",
+    "source": "m0ep5u6",
+    "target": "qinvkhj",
+    "sourceHandle": "m0ep5u6-output-1",
+    "targetHandle": "qinvkhj-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 670.1130341966228,
+    "sourceY": 349.89454589955017,
+    "targetX": 398.51793707673744,
+    "targetY": 480.73865097813723
+   },
+   {
+    "id": "vueflow__edge-aT-7UAiK0kTTybXPG259naT-7UAiK0kTTybXPG259n-output-1-gxts4jkgxts4jk-input-1",
+    "type": "custom",
+    "source": "aT-7UAiK0kTTybXPG259n",
+    "target": "gxts4jk",
+    "sourceHandle": "aT-7UAiK0kTTybXPG259n-output-1",
+    "targetHandle": "gxts4jk-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 614.4941020851493,
+    "sourceY": 66.40689496706437,
+    "targetX": 404.397561402406,
+    "targetY": 208.31230220143053
+   },
+   {
+    "id": "vueflow__edge-gxts4jkgxts4jk-output-1-m0ep5u6m0ep5u6-input-1",
+    "type": "custom",
+    "source": "gxts4jk",
+    "target": "m0ep5u6",
+    "sourceHandle": "gxts4jk-output-1",
+    "targetHandle": "m0ep5u6-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 644.3688884576522,
+    "sourceY": 208.31230220143053,
+    "targetX": 430.14170714137657,
+    "targetY": 349.89454589955017
+   },
+   {
+    "id": "vueflow__edge-iefbbd9iefbbd9-output-1-k8ah7bck8ah7bc-input-1",
+    "type": "custom",
+    "source": "iefbbd9",
+    "target": "k8ah7bc",
+    "sourceHandle": "iefbbd9-output-1",
+    "targetHandle": "k8ah7bc-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 156.80762281207,
+    "sourceY": 220.92480613686448,
+    "targetX": 103.05191028943788,
+    "targetY": 82.15571034092326
+   },
+   {
+    "id": "vueflow__edge-k8ah7bck8ah7bc-output-1-aT-7UAiK0kTTybXPG259naT-7UAiK0kTTybXPG259n-input-1",
+    "type": "custom",
+    "source": "k8ah7bc",
+    "target": "aT-7UAiK0kTTybXPG259n",
+    "sourceHandle": "k8ah7bc-output-1",
+    "targetHandle": "aT-7UAiK0kTTybXPG259n-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 343.0232041459424,
+    "sourceY": 82.15571034092326,
+    "targetX": 374.522775029903,
+    "targetY": 66.40689496706437
+   },
+   {
+    "id": "vueflow__edge-qinvkhjqinvkhj-output-1-3f698893f69889-input-1",
+    "type": "custom",
+    "source": "qinvkhj",
+    "target": "3f69889",
+    "sourceHandle": "qinvkhj-output-1",
+    "targetHandle": "3f69889-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 638.4891977345003,
+    "sourceY": 480.73865097813723,
+    "targetX": 417.41691437748386,
+    "targetY": 600.899874435316
+   },
+   {
+    "id": "vueflow__edge-wanufkfwanufkf-output-1-xg2ucj3xg2ucj3-input-1",
+    "type": "custom",
+    "source": "wanufkf",
+    "target": "xg2ucj3",
+    "sourceHandle": "wanufkf-output-1",
+    "targetHandle": "xg2ucj3-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 3045.5829645803083,
+    "sourceY": 857.9761169970061,
+    "targetX": 3052.7080597364393,
+    "targetY": 938.817584587836
+   },
+   {
+    "id": "vueflow__edge-ovpj5smovpj5sm-output-1-wanufkfwanufkf-input-1",
+    "type": "custom",
+    "source": "ovpj5sm",
+    "target": "wanufkf",
+    "sourceHandle": "ovpj5sm-output-1",
+    "targetHandle": "wanufkf-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 2796.7489706866095,
+    "sourceY": 1023.3491132852763,
+    "targetX": 2805.611770320029,
+    "targetY": 857.9761169970061
+   },
+   {
+    "id": "vueflow__edge-l94iemql94iemq-output-1-2q0q9e02q0q9e0-input-1",
+    "type": "custom",
+    "source": "l94iemq",
+    "target": "2q0q9e0",
+    "sourceHandle": "l94iemq-output-1",
+    "targetHandle": "2q0q9e0-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 1887.4249510130367,
+    "sourceY": 901.6333177457352,
+    "targetX": 1770.202979045832,
+    "targetY": 1089.4668600009704
+   },
+   {
+    "id": "vueflow__edge-2q0q9e02q0q9e0-output-1-6jrqt3p6jrqt3p-input-1",
+    "type": "custom",
+    "source": "2q0q9e0",
+    "target": "6jrqt3p",
+    "sourceHandle": "2q0q9e0-output-1",
+    "targetHandle": "6jrqt3p-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 2010.1741733061115,
+    "sourceY": 1089.4668600009704,
+    "targetX": 1968.3299102511612,
+    "targetY": 838.4963007114495
+   },
+   {
+    "id": "vueflow__edge-6jrqt3p6jrqt3p-output-1-dbxglgcdbxglgc-input-1",
+    "type": "custom",
+    "source": "6jrqt3p",
+    "target": "dbxglgc",
+    "sourceHandle": "6jrqt3p-output-1",
+    "targetHandle": "dbxglgc-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "class": "source-6jrqt3p-output-1 target-dbxglgc-input-1",
+    "sourceX": 2208.301104511441,
+    "sourceY": 838.4963007114495,
+    "targetX": 2162.647115213983,
+    "targetY": 731.1994192658719
+   },
+   {
+    "id": "vueflow__edge-dbxglgcdbxglgc-output-1-unmwiruunmwiru-input-1",
+    "type": "custom",
+    "source": "dbxglgc",
+    "target": "unmwiru",
+    "sourceHandle": "dbxglgc-output-1",
+    "targetHandle": "unmwiru-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "class": "source-dbxglgc-output-1 target-unmwiru-input-1",
+    "sourceX": 2402.618575064196,
+    "sourceY": 731.1994192658719,
+    "targetX": 2171.7176868269257,
+    "targetY": 994.0184545404869
+   },
+   {
+    "id": "vueflow__edge-unmwiruunmwiru-output-1-by7s2doby7s2do-input-1",
+    "type": "custom",
+    "source": "unmwiru",
+    "target": "by7s2do",
+    "sourceHandle": "unmwiru-output-1",
+    "targetHandle": "by7s2do-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 2411.6886154972717,
+    "sourceY": 994.0184545404869,
+    "targetX": 2311.5021801606267,
+    "targetY": 1198.7057799740958
+   },
+   {
+    "id": "vueflow__edge-by7s2doby7s2do-output-1-cpfcad1cpfcad1-input-1",
+    "type": "custom",
+    "source": "by7s2do",
+    "target": "cpfcad1",
+    "sourceHandle": "by7s2do-output-1",
+    "targetHandle": "cpfcad1-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 2551.47364001084,
+    "sourceY": 1198.7057799740958,
+    "targetX": 2402.3018776891727,
+    "targetY": 888.4548320268373
+   },
+   {
+    "id": "vueflow__edge-cpfcad1cpfcad1-output-1-p65aqx1p65aqx1-input-1",
+    "type": "custom",
+    "source": "cpfcad1",
+    "target": "p65aqx1",
+    "sourceHandle": "cpfcad1-output-1",
+    "targetHandle": "p65aqx1-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "class": "source-cpfcad1-output-1 target-p65aqx1-input-1",
+    "sourceX": 2642.273071949452,
+    "sourceY": 888.4548320268373,
+    "targetX": 2536.647088165577,
+    "targetY": 774.4003812153156
+   },
+   {
+    "id": "vueflow__edge-p65aqx1p65aqx1-output-1-ovpj5smovpj5sm-input-1",
+    "type": "custom",
+    "source": "p65aqx1",
+    "target": "ovpj5sm",
+    "sourceHandle": "p65aqx1-output-1",
+    "targetHandle": "ovpj5sm-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "class": "source-p65aqx1-output-1 target-ovpj5sm-input-1",
+    "sourceX": 2776.61854801579,
+    "sourceY": 774.4003812153156,
+    "targetX": 2556.7775108363962,
+    "targetY": 1023.3491132852763
+   },
+   {
+    "id": "vueflow__edge-rm1qksvrm1qksv-output-1-4b4es234b4es23-input-1",
+    "type": "custom",
+    "source": "rm1qksv",
+    "target": "4b4es23",
+    "sourceHandle": "rm1qksv-output-1",
+    "targetHandle": "4b4es23-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 669.2627793184794,
+    "sourceY": 729.7351220180357,
+    "targetX": 447.8685441282429,
+    "targetY": 886.926839402128
+   },
+   {
+    "id": "vueflow__edge-4v6ci2s4v6ci2s-output-1-rm1qksvrm1qksv-input-1",
+    "type": "custom",
+    "source": "4v6ci2s",
+    "target": "rm1qksv",
+    "sourceHandle": "4v6ci2s-output-1",
+    "targetHandle": "rm1qksv-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 961.74576483546,
+    "sourceY": 617.5854502807408,
+    "targetX": 429.29145226323317,
+    "targetY": 729.7351220180357
+   },
+   {
+    "id": "vueflow__edge-h3316ruh3316ru-output-1-6stmwir6stmwir-input-1",
+    "type": "custom",
+    "source": "h3316ru",
+    "target": "6stmwir",
+    "sourceHandle": "h3316ru-output-1",
+    "targetHandle": "6stmwir-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 2023.8383066369781,
+    "sourceY": 149.4660026739053,
+    "targetX": 2255.996333210177,
+    "targetY": 198.41954838957471
+   },
+   {
+    "id": "vueflow__edge-6938fc06938fc0-output-1-tfe4twktfe4twk-input-1",
+    "type": "custom",
+    "source": "6938fc0",
+    "target": "tfe4twk",
+    "sourceHandle": "6938fc0-output-1",
+    "targetHandle": "tfe4twk-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 1376.8206009761539,
+    "sourceY": -9.982107816051307,
+    "targetX": 1486.8820027783706,
+    "targetY": 43.94391524235127
+   },
+   {
+    "id": "vueflow__edge-tfe4twktfe4twk-output-1-h3316ruh3316ru-input-1",
+    "type": "custom",
+    "source": "tfe4twk",
+    "target": "h3316ru",
+    "sourceHandle": "tfe4twk-output-1",
+    "targetHandle": "h3316ru-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 1726.85319703865,
+    "sourceY": 43.94391524235127,
+    "targetX": 1783.866846786765,
+    "targetY": 149.4660026739053
+   },
+   {
+    "id": "vueflow__edge-6stmwir6stmwir-output-1-7mq2uf67mq2uf6-input-1",
+    "type": "custom",
+    "source": "6stmwir",
+    "target": "7mq2uf6",
+    "sourceHandle": "6stmwir-output-1",
+    "targetHandle": "7mq2uf6-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 2495.96779306039,
+    "sourceY": 198.41954838957471,
+    "targetX": 1987.296025649658,
+    "targetY": 402.9366170226686
+   },
+   {
+    "id": "vueflow__edge-7mq2uf67mq2uf6-output-1-b85x0wdb85x0wd-input-1",
+    "type": "custom",
+    "source": "7mq2uf6",
+    "target": "b85x0wd",
+    "sourceHandle": "7mq2uf6-output-1",
+    "targetHandle": "b85x0wd-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 2227.2672199099375,
+    "sourceY": 402.9366170226686,
+    "targetX": 2258.172311943029,
+    "targetY": 404.4449283385982,
+    "class": "connected-edges"
+   },
+   {
+    "id": "vueflow__edge-2g1OWofGN01wgSNyKvefY2g1OWofGN01wgSNyKvefY-output-1-iefbbd9iefbbd9-input-1",
+    "type": "custom",
+    "source": "2g1OWofGN01wgSNyKvefY",
+    "target": "iefbbd9",
+    "sourceHandle": "2g1OWofGN01wgSNyKvefY-output-1",
+    "targetHandle": "iefbbd9-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 0.0,
+    "sourceY": 0.0,
+    "targetX": 0.0,
+    "targetY": 0.0
+   },
+   {
+    "id": "vueflow__edge-3f698893f69889-output-1-l94iemql94iemq-input-1",
+    "type": "custom",
+    "source": "3f69889",
+    "target": "l94iemq",
+    "sourceHandle": "3f69889-output-1",
+    "targetHandle": "l94iemq-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 0.0,
+    "sourceY": 0.0,
+    "targetX": 0.0,
+    "targetY": 0.0
+   },
+   {
+    "id": "vueflow__edge-xg2ucj3xg2ucj3-output-1-8gfj1v28gfj1v2-input-1",
+    "type": "custom",
+    "source": "xg2ucj3",
+    "target": "8gfj1v2",
+    "sourceHandle": "xg2ucj3-output-1",
+    "targetHandle": "8gfj1v2-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 0.0,
+    "sourceY": 0.0,
+    "targetX": 0.0,
+    "targetY": 0.0
+   },
+   {
+    "id": "vueflow__edge-16ilgtm16ilgtm-output-1-4v6ci2s4v6ci2s-input-1",
+    "type": "custom",
+    "source": "16ilgtm",
+    "target": "4v6ci2s",
+    "sourceHandle": "16ilgtm-output-1",
+    "targetHandle": "4v6ci2s-input-1",
+    "updatable": true,
+    "selectable": true,
+    "data": {},
+    "label": "",
+    "markerEnd": "arrowclosed",
+    "sourceX": 0.0,
+    "sourceY": 0.0,
+    "targetX": 0.0,
+    "targetY": 0.0
+   }
+  ],
+  "position": [
+   -950.7022126578918,
+   221.08045824311932
+  ],
+  "zoom": 0.9192388282018981,
+  "viewport": {
+   "x": -950.7022126578918,
+   "y": 221.08045824311932,
+   "zoom": 0.9192388282018981
+  }
+ },
+ "settings": {
+  "aipowerToken": "",
+  "blockDelay": 0,
+  "debugMode": false,
+  "defaultColumnName": "column",
+  "execContext": "popup",
+  "executedBlockOnWeb": false,
+  "inputAutocomplete": true,
+  "insertDefaultColumn": false,
+  "notification": true,
+  "onError": "stop-workflow",
+  "publicId": "",
+  "restartTimes": 3,
+  "reuseLastState": false,
+  "saveLog": true,
+  "tabLoadTimeout": 30000
+ },
+ "globalData": "{\n\t\"key\": \"value\"\n}",
+ "description": "mercari 上架 + 草稿删除（已补全连线：trigger起点/分类链，2026-10-10）",
+ "includedWorkflows": {}
+}

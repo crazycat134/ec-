@@ -5,8 +5,7 @@
 ## ✨ 功能特性
 
 - 📷 **相机自动导入**：Lumix GF9 USB 连接后自动扫描 DCIM、去重、压缩
-- ☁️ **R2 图片托管**：自动上传 Cloudflare R2，生成 HTTPS 公开 URL
-- 💰 **AI 价格诊断**：输入品牌+型号，自动查全新品价格，生成 3×3 价格矩阵
+- 💰 **AI 价格诊断**：输入品牌+型号，AI 查 Amazon/楽天/メルカリ/Yahoo! 多平台价格，状态/附属品联动滑块定价
 - 📝 **AI 商品描述**：DeepSeek 自动生成日文商品说明文（含商品介绍/状态/附件/动作确认）
 - ✅ **动作确认 Checklist**：AI 生成标准检查清单，逐项打勾
 - 📋 **批量操作**：多选商品，批量确认/删除
@@ -19,7 +18,6 @@
 | 后端 | Python 3.11+ / Flask |
 | 数据库 | SQLite |
 | 图片处理 | Pillow |
-| 图片存储 | Cloudflare R2 (boto3) |
 | AI | DeepSeek API |
 | 浏览器自动化 | Automa (Chrome 扩展) |
 
@@ -32,7 +30,6 @@ SecondhandECAgent/
 │   ├── config.py             # 读取配置
 │   ├── db.py                # SQLite 数据库
 │   ├── deepseek_client.py  # DeepSeek AI 客户端
-│   ├── r2_uploader.py       # Cloudflare R2 上传
 │   ├── camera_import.py      # 相机照片导入
 │   ├── price_engine.py       # 价格计算引擎
 │   └── templates/
@@ -70,12 +67,6 @@ cp config/secrets.env.example config/secrets.env
 
 需要配置的内容：
 
-#### Cloudflare R2（图片存储）
-- 创建 R2 bucket
-- 生成 API Token（Object Read & Write 权限）
-- 开启 R2.dev 公开访问
-- 填入 `R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_PUBLIC_BASE_URL`
-
 #### DeepSeek API（AI 功能，可选）
 - 注册 https://platform.deepseek.com
 - 创建 API Key
@@ -101,7 +92,7 @@ python run.py
 | `/api/products/<id>` | DELETE | 删除商品 |
 | `/api/drafts` | GET | 获取草稿列表 |
 | `/api/calculate_price` | POST | 计算推荐价格 |
-| `/api/suggest_price` | POST | AI 查全新品价格 |
+| `/api/suggest_price` | POST | AI 查各平台价格（新品/中古 + 状态/附属品选项） |
 | `/api/generate_description` | POST | AI 生成商品描述 |
 | `/api/generate_checklist` | POST | AI 生成检查清单 |
 | `/api/import_photos` | POST | 导入相机照片 |
@@ -147,5 +138,4 @@ python test_system.py
 ## 🙏 致谢
 
 - [DeepSeek](https://www.deepseek.com/) - AI 大模型
-- [Cloudflare R2](https://www.cloudflare.com/r2/) - 图片存储
 - [Automa](https://www.automa.site/) - 浏览器自动化

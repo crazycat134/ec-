@@ -9,7 +9,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python -c "import flask, dotenv, boto3, PIL, requests, PyInstaller" >nul 2>nul
+python -c "import flask, dotenv, PIL, requests, PyInstaller" >nul 2>nul
 if errorlevel 1 (
     echo [INFO] Installing dependencies, please wait...
     python -m pip install -r requirements.txt
@@ -28,7 +28,6 @@ if exist "SecondhandECAgent.spec" del "SecondhandECAgent.spec"
 rem ---------- PyInstaller (real secrets.env is NOT bundled) ----------
 python -m PyInstaller --noconfirm --clean --name SecondhandECAgent ^
   --paths . ^
-  --collect-all boto3 ^
   --add-data "app\templates;app\templates" ^
   run.py
 if errorlevel 1 (

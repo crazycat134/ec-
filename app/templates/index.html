@@ -2,6 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Secondhand EC Agent V3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -76,6 +77,60 @@
   .tab-bar { display: flex; border-bottom: 1px solid #e5e7eb; }
   .tab { padding: 10px 16px; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; }
   .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
+
+  /* 移动端返回按钮（默认隐藏，窄屏显示） */
+  .mobile-back { display: none !important; }
+
+  /* ===== 手机适配（<=768px） ===== */
+  @media (max-width: 768px) {
+    body { overflow: auto; height: auto; }
+
+    .header { padding: 10px 14px; }
+    .header h1 { font-size: 15px; }
+    .header .btn-sm { padding: 8px 14px; font-size: 14px; }
+
+    .stats-bar { flex-wrap: wrap; gap: 12px 16px; padding: 10px 14px; }
+    .stat { flex: 1 1 40%; min-width: 0; }
+    .stat .num { font-size: 18px; }
+
+    /* 主体改单列：默认显示列表，进入详情时切换 */
+    .main { display: block; height: auto; }
+    .sidebar { width: 100%; border-right: none; height: calc(100vh - 118px); }
+    .detail { display: none; min-height: calc(100vh - 60px); padding: 0; }
+    .main.view-detail .sidebar { display: none; }
+    .main.view-detail .detail { display: block; }
+    .mobile-back { display: inline-block !important; margin-bottom: 12px; }
+
+    .product-item { padding: 14px 12px; }
+    .product-item .thumb { width: 56px; height: 56px; }
+    .product-item .title { font-size: 15px; }
+    .product-item .price { font-size: 15px; }
+
+    .detail-card { padding: 16px; border-radius: 12px; margin: 12px; box-shadow: none; border: 1px solid #e5e7eb; }
+
+    /* 触控目标放大 + 防 iOS 输入框缩放 */
+    .btn { padding: 10px 18px; font-size: 15px; }
+    .form-group input, .form-group select, .form-group textarea,
+    #add-brand, #add-model, #diag-status, #diag-accessory {
+      font-size: 16px !important; padding: 10px 12px !important; border-radius: 10px !important;
+    }
+    .form-row { grid-template-columns: 1fr; }
+    .checkbox-row label { font-size: 15px; }
+
+    /* 品牌/型号/诊断按钮 窄屏时纵向排列，避免超出屏幕 */
+    .add-input-row { flex-direction: column !important; }
+    .add-input-row input { flex: none !important; width: 100%; }
+    .add-input-row .btn { width: 100%; padding: 12px; }
+
+    /* 价格诊断大字 + 滑块 */
+    #diag-price-big { font-size: 42px; }
+    #diag-slider { height: 36px; }
+    #diag-btn-new, #diag-btn-used { padding: 12px 8px; font-size: 15px; }
+
+    /* 批量操作栏固定在底部 */
+    #batch-bar { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; border-radius: 0; padding: 12px 16px; }
+    .product-list { padding-bottom: 70px; }
+  }
 </style>
 </head>
 <body>
@@ -125,6 +180,7 @@
       <span id="batch-count" style="font-size:14px;">已选 0 件</span>
       <div style="display:flex; gap:8px;">
         <button class="btn btn-sm" style="background:#374151; color:#fff;" onclick="clearSelection()">取消</button>
+        <button class="btn btn-sm" style="background:#3b82f6; color:#fff;" onclick="batchAiGen()">AI 一括生成</button>
         <button class="btn btn-sm" style="background:#ef4444; color:#fff;" onclick="batchDelete()">删除</button>
         <button class="btn btn-sm" style="background:#22c55e; color:#fff;" onclick="batchConfirm()">✓ 批量确认</button>
       </div>
@@ -152,6 +208,14 @@ let selectedId = null;
 let selectedIds = new Set(); // 多选
 let currentTab = 'products';
 
+// ===== 移动端视图切换（窄屏：列表 ⇄ 详情） =====
+function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
+function showMobileDetail() { if (isMobile()) document.querySelector('.main').classList.add('view-detail'); }
+function backToList() {
+  document.querySelector('.main').classList.remove('view-detail');
+  document.querySelector('.product-list').scrollTop = 0;
+}
+
 function toggleSelect(id, checked) {
   if (checked) selectedIds.add(id);
   else selectedIds.delete(id);
@@ -166,6 +230,52 @@ function toggleSelectAll(checked) {
     list.forEach(p => selectedIds.delete(p.id));
   }
   renderList();
+}
+
+// 批量 AI 生成：为选中商品逐件生成日文描述并保存
+async function batchAiGen() {
+  if (selectedIds.size === 0) return;
+  const items = allProducts.filter(p => selectedIds.has(p.id));
+  if (!confirm(`AI 为 ${items.length} 件商品生成描述？（每件约需数秒）`)) return;
+  let ok = 0, fail = 0;
+  showToast(`AI 生成中 0/${items.length} ...`);
+  for (let i = 0; i < items.length; i++) {
+    const p = items[i];
+    try {
+      const r1 = await fetch('/api/generate_description', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: p.title,
+          status: p.status,
+          works_confirmed: !!p.works_confirmed,
+          accessories: p.accessories || []
+        })
+      });
+      const j1 = await r1.json();
+      if (!j1.description) throw new Error(j1.error || 'AI error');
+      const r2 = await fetch('/api/products/' + p.id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: p.title,
+          price: Number(p.price),
+          status: p.status,
+          description: j1.description,
+          categories: p.categories || [],
+          works_confirmed: !!p.works_confirmed,
+          accessories: p.accessories || []
+        })
+      });
+      const j2 = await r2.json();
+      if (!j2.ok) throw new Error(j2.error || 'save error');
+      ok++;
+    } catch (e) {
+      fail++;
+      console.error('batchAI fail:', p.title, e);
+    }
+    showToast(`AI 生成中 ${i + 1}/${items.length} ...`);
+  }
+  loadList();
+  showToast(`AI 一括生成完了：成功 ${ok} 件${fail ? `，失敗 ${fail} 件` : ''}`);
 }
 
 async function batchConfirm() {
@@ -304,8 +414,10 @@ function renderDetail() {
   const detail = document.getElementById('detail');
   if (!selectedId) {
     detail.innerHTML = '<div class="empty"><p>← 选择左侧商品查看详情</p></div>';
+    backToList();
     return;
   }
+  showMobileDetail();
 
   const list = currentTab === 'products' ? allProducts : allDrafts;
   const p = list.find(x => x.id === selectedId);
@@ -316,6 +428,7 @@ function renderDetail() {
 
   detail.innerHTML = `
     <div class="detail-card">
+      <button class="btn btn-sm mobile-back" onclick="backToList()">← リストに戻る</button>
       <h2>${esc(p.title)}</h2>
 
       <div class="form-row">
@@ -392,47 +505,67 @@ function getAccessories() {
   return ['box', 'manual', 'charger', 'other'].filter(a => document.getElementById('acc-' + a).checked);
 }
 
+// ===== 価格診断（添加商品模式） =====
+let diag = null;          // /api/suggest_price 返回的诊断数据
+let diagMode = 'new';     // 'new' | 'used' 新品/中古切换
+let diagStatus = 'BRAND_NEW';
+let diagAcc = 'none';
+
 function showAddForm() {
+  diag = null; diagMode = 'new'; diagStatus = 'BRAND_NEW'; diagAcc = 'none';
+  showMobileDetail();
   const detail = document.getElementById('detail');
   detail.innerHTML = `
     <div class="detail-card">
+      <button class="btn btn-sm mobile-back" onclick="backToList()">← リストに戻る</button>
       <h2>💰 価格診断</h2>
-      <p class="meta" style="margin-bottom:16px;">ブランドと型番を入力すると、状態・付属品・動作確認の組み合わせ別に推奨価格を診断します。</p>
+      <p style="color:#6b7280; font-size:13px; margin-bottom:20px;">ブランドと型番を入力すると、Amazon・楽天・メルカリ・Yahoo!の相場を元に推奨価格を診断します。</p>
 
       <!-- 输入区 -->
-      <div style="display:flex; gap:8px; margin-bottom:20px;">
+      <div class="add-input-row" style="display:flex; gap:8px; margin-bottom:20px;">
         <input id="add-brand" placeholder="ブランド（例：Panasonic）" style="flex:1; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px;">
         <input id="add-model" placeholder="型番（例：DC-GF9）" style="flex:1; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px;">
         <button class="btn btn-primary" onclick="aiPriceSuggest()">診断する</button>
       </div>
 
-      <!-- 价格矩阵 - 卡片式布局 -->
-      <div id="price-matrix" style="display:none;">
-        <div style="font-size:13px; color:#6b7280; margin-bottom:12px;">推奨価格 — クリックして選択</div>
-        <div id="matrix-body" style="display:flex; flex-direction:column; gap:12px;">
+      <!-- 价格诊断面板（診断後に表示） -->
+      <div id="diag-panel" style="display:none;">
+        <!-- 📊 平台价格列表（水平范围条可视化） -->
+        <div style="margin-bottom:20px;">
+          <div style="font-size:14px; font-weight:600; margin-bottom:10px;">📊 プラットフォーム別価格</div>
+          <div id="diag-new-list" style="margin-bottom:14px;"></div>
+          <div id="diag-used-list"></div>
         </div>
 
-        <div style="margin-top:20px; font-size:13px;">
-          <div style="font-weight:600; margin-bottom:8px;">動作確認</div>
-          <div style="display:flex; gap:12px;">
-            <div id="card-works-ok" onclick="selectWorks(true)" style="flex:1; padding:14px; background:#f0fdf4; border:2px solid transparent; border-radius:12px; text-align:center; cursor:pointer; transition:all 0.2s;">
-              <div style="font-size:12px; color:#166534; margin-bottom:4px;">✓ 動作確認済み</div>
-              <div style="font-size:20px; font-weight:700; color:#166534;" id="price-works-ok">-</div>
-              <div style="font-size:11px; color:#166534; opacity:0.7; margin-top:4px;">価格 95%</div>
-            </div>
-            <div id="card-works-ng" onclick="selectWorks(false)" style="flex:1; padding:14px; background:#fef2f2; border:2px solid transparent; border-radius:12px; text-align:center; cursor:pointer; transition:all 0.2s;">
-              <div style="font-size:12px; color:#991b1b; margin-bottom:4px;">⚠ 動作未確認（ジャンク）</div>
-              <div style="font-size:20px; font-weight:700; color:#991b1b;" id="price-works-ng">-</div>
-              <div style="font-size:11px; color:#991b1b; opacity:0.7; margin-top:4px;">価格 50%</div>
-            </div>
+        <!-- 商品状態 / 付属品 下拉选择器 -->
+        <div style="display:flex; gap:12px; margin-bottom:16px;">
+          <div style="flex:1;">
+            <div style="font-size:13px; color:#6b7280; margin-bottom:6px;">商品状態</div>
+            <select id="diag-status" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" onchange="diagRefresh()"></select>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:13px; color:#6b7280; margin-bottom:6px;">付属品</div>
+            <select id="diag-accessory" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;" onchange="diagRefresh()"></select>
           </div>
         </div>
 
-        <!-- 选中条件 + 创建按钮 -->
-        <div id="selected-info" style="display:none; margin-top:20px; padding:14px; background:#eff6ff; border-radius:12px; font-size:14px;">
-          <div style="margin-bottom:8px;">選択中：<b id="sel-summary"></b></div>
-          <button class="btn btn-primary" onclick="createFromSelection()">この条件で出品する →</button>
+        <!-- 新品/中古 切换按钮 -->
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <button id="diag-btn-new" class="btn" style="flex:1;" onclick="diagSetMode('new')">🆕 新品価格</button>
+          <button id="diag-btn-used" class="btn" style="flex:1;" onclick="diagSetMode('used')">♻️ 中古価格</button>
         </div>
+
+        <!-- 当前条件 + 大字价格 + 价格滑块 -->
+        <div style="padding:16px; background:#f9fafb; border-radius:12px; margin-bottom:16px;">
+          <div id="diag-condition" style="font-size:13px; color:#6b7280; text-align:center; margin-bottom:8px;"></div>
+          <div id="diag-price-big" style="font-size:36px; font-weight:700; text-align:center; color:#dc2626; margin-bottom:12px;">-</div>
+          <input type="range" id="diag-slider" min="0" max="100" step="100" value="0" style="width:100%;" oninput="diagSlider()">
+          <div style="display:flex; justify-content:space-between; font-size:12px; color:#6b7280; margin-top:4px;">
+            <span id="diag-range-low">-</span><span id="diag-range-high">-</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%; padding:12px;" onclick="diagSave()">この価格で保存 →</button>
       </div>
 
       <div class="btn-row">
@@ -443,117 +576,178 @@ function showAddForm() {
 }
 
 async function aiPriceSuggest() {
-  const brand = document.getElementById('add-brand').value;
-  const model = document.getElementById('add-model').value;
+  const brand = document.getElementById('add-brand').value.trim();
+  const model = document.getElementById('add-model').value.trim();
   if (!brand || !model) { showToast('ブランドと型番を入力してください'); return; }
-  showToast('AI が価格を調査中...');
-
-  // 先调 AI 查全新品价格
+  showToast('AI が各プラットフォームの価格を調査中...');
   const r = await fetch('/api/suggest_price', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ brand, model })
   });
   const j = await r.json();
-  const basePrice = j.new_price || 30000;
-  showToast(`新品参考価格：¥${basePrice.toLocaleString()}（${j.note || ''}）`);
+  if (j.error) { showToast('診断失敗：' + j.error); return; }
+  diag = j;
+  diagMode = 'new';
+  diagStatus = j.status_options[0].key;
+  // 默认选中第一项（付属品なし，标配箱・説明書自动带上）
+  const accOpts = j.accessory_options || [];
+  diagAcc = accOpts[0] ? accOpts[0].key : 'none';
+  renderDiag();
+}
 
-  // 保存当前选择
-  window._selStatus = null;
-  window._selAccessory = null;
-  window._selWorks = null;
-  const statuses = [
-    { key: 'BRAND_NEW', label: '新品・未使用', mult: 1.0 },
-    { key: 'CLEAN', label: '目立った傷や汚れなし', mult: 0.9 },
-    { key: 'LITTLE_DIRTY', label: 'やや傷や汚れあり', mult: 0.8 },
-  ];
-  const accessories = [
-    { key: 'none', label: '付属品なし', bonus: 0, list: [] },
-    { key: 'box_manual', label: '箱・説明書', bonus: 0.07, list: ['box', 'manual'] },
-    { key: 'all', label: '箱・説明書・充電器', bonus: 0.10, list: ['box', 'manual', 'charger'] },
-  ];
+function renderDiag() {
+  // 📊 平台价格列表（水平范围条可视化，参考価格.com / メルカリ风格）
+  diagPriceList('diag-new-list', [
+    { name: 'Amazon', color: '#ff9900', p: diag.new.amazon },
+    { name: '楽天', color: '#bf0000', p: diag.new.rakuten },
+  ], '🆕 新品');
+  diagPriceList('diag-used-list', [
+    { name: 'メルカリ', color: '#00b8d4', p: diag.used.mercari },
+    { name: 'Yahoo!', color: '#ff0033', p: diag.used.yahoo },
+  ], '♻️ 中古・動作確認済み');
 
-  let html = '';
-  statuses.forEach((s, si) => {
-    html += `<div>`;
-    html += `<div style="font-size:13px; font-weight:600; color:#374151; margin-bottom:8px;">${s.label}</div>`;
-    html += `<div style="display:flex; gap:8px;">`;
-    accessories.forEach((a, ai) => {
-      const price = Math.round(basePrice * (s.mult + a.bonus));
-      html += `<div onclick="selectCell(${si},${ai},${price})" id="cell-${si}-${ai}" style="flex:1; padding:12px; background:#f9fafb; border:2px solid transparent; border-radius:10px; text-align:center; cursor:pointer; transition:all 0.2s;">`;
-      html += `<div style="font-size:11px; color:#6b7280; margin-bottom:4px;">${a.label}</div>`;
-      html += `<div style="font-size:16px; font-weight:700; color:#111827;">¥${price.toLocaleString()}</div>`;
-      html += `</div>`;
-    });
-    html += `</div>`;
-    html += `</div>`;
+  // 商品状態 / 付属品 下拉
+  const stSel = document.getElementById('diag-status');
+  stSel.innerHTML = diag.status_options.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+  stSel.value = diagStatus;
+  const accSel = document.getElementById('diag-accessory');
+  accSel.innerHTML = diag.accessory_options.map(a => `<option value="${a.key}">${a.label}</option>`).join('');
+  accSel.value = diagAcc;
+
+  document.getElementById('diag-panel').style.display = 'block';
+  diagRefresh();
+  if (diag.note) showToast(diag.note);
+}
+
+// 📊 平台价格列表：水平范围条可视化
+// 浅色条 = 完整区间(low~high)；深色条 = 中间50%集中区(以均价为中心模拟Q1~Q3)；圆点 = 均价
+// 同一组（新品/中古）共用一条 x 轴刻度，方便横向对比
+function diagPriceList(containerId, data, label) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const gMin = Math.min(...data.map(d => d.p.low));
+  const gMax = Math.max(...data.map(d => d.p.high));
+  const range = Math.max(1, gMax - gMin);
+  const pct = v => ((v - gMin) / range) * 100;
+
+  let html = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <span style="font-size:13px; font-weight:600; color:#6b7280;">${label}</span>
+      <span style="font-size:11px; color:#9ca3af;">¥${gMin.toLocaleString()} 〜 ¥${gMax.toLocaleString()}</span>
+    </div>`;
+  data.forEach(d => {
+    const { price, low, high } = d.p;
+    const half = (high - low) * 0.25;              // 中间50%集中区半宽
+    const q1 = price - half, q3 = price + half;
+    const left = pct(low), right = pct(high);
+    const q1p = Math.max(left, pct(q1)), q3p = Math.min(right, pct(q3));
+    const avgp = Math.min(100, Math.max(0, pct(price)));
+    html += `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div style="width:10px; height:10px; border-radius:2px; background:${d.color};"></div>
+            <span style="font-size:13px; color:#374151; font-weight:500;">${d.name}</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span style="font-size:11px; color:#9ca3af;">¥${low.toLocaleString()} 〜 ¥${high.toLocaleString()}</span>
+            <span style="font-size:16px; font-weight:700; color:#111827;">¥${price.toLocaleString()}</span>
+          </div>
+        </div>
+        <div style="position:relative; height:20px; background:#f3f4f6; border-radius:10px;">
+          <div style="position:absolute; left:${left}%; right:${100 - right}%; top:50%; transform:translateY(-50%); height:6px; background:${d.color}33; border-radius:3px;"></div>
+          <div style="position:absolute; left:${q1p}%; right:${100 - q3p}%; top:50%; transform:translateY(-50%); height:6px; background:${d.color}88; border-radius:3px;"></div>
+          <div style="position:absolute; left:${avgp}%; top:50%; transform:translate(-50%,-50%); width:12px; height:12px; background:${d.color}; border:2px solid #fff; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
+        </div>
+      </div>`;
   });
-  document.getElementById('matrix-body').innerHTML = html;
-
-  document.getElementById('price-works-ok').textContent = '¥' + Math.round(basePrice * 0.95).toLocaleString();
-  document.getElementById('price-works-ng').textContent = '¥' + Math.round(basePrice * 0.5).toLocaleString();
-
-  document.getElementById('price-matrix').style.display = 'block';
-  showToast('診断完了 — 価格をクリックして選択');
+  el.innerHTML = html;
 }
 
-function selectCell(si, ai, price) {
-  // 清除之前的选中
-  document.querySelectorAll('#matrix-body div[id^="cell-"]').forEach(div => {
-    div.style.background = '#f9fafb';
-    div.style.borderColor = 'transparent';
-  });
-  // 选中当前
-  const cell = document.getElementById(`cell-${si}-${ai}`);
-  cell.style.background = '#dbeafe';
-  cell.style.borderColor = '#3b82f6';
-  window._selStatus = ['BRAND_NEW', 'CLEAN', 'LITTLE_DIRTY'][si];
-  window._selAccessory = [
-    { key: 'none', list: [] },
-    { key: 'box_manual', list: ['box', 'manual'] },
-    { key: 'all', list: ['box', 'manual', 'charger'] },
-  ][ai];
-  window._selPrice = price;
-  updateSelectedInfo();
+function diagBase() {
+  return diagMode === 'new' ? diag.new_base : diag.used_base;
 }
 
-function selectWorks(ok) {
-  window._selWorks = ok;
-  document.getElementById('card-works-ok').style.borderColor = ok ? '#166534' : 'transparent';
-  document.getElementById('card-works-ng').style.borderColor = !ok ? '#991b1b' : 'transparent';
-  updateSelectedInfo();
+function diagRange() {
+  const st = diag.status_options.find(s => s.key === diagStatus);
+  const acc = diag.accessory_options.find(a => a.key === diagAcc);
+  const center = Math.round(diagBase() * (st.mult + acc.bonus));
+  const low = Math.round(center * 0.9);
+  const high = Math.round(center * 1.1);
+  return { low, center, high };
 }
 
-function updateSelectedInfo() {
-  if (window._selStatus && window._selAccessory && window._selWorks !== null) {
-    const statusLabel = { 'BRAND_NEW': '新品・未使用', 'CLEAN': '目立った傷や汚れなし', 'LITTLE_DIRTY': 'やや傷や汚れあり' }[window._selStatus];
-    const worksLabel = window._selWorks ? '動作確認済み' : '動作未確認';
-    document.getElementById('sel-summary').textContent = `${statusLabel} / ${window._selAccessory.key === 'none' ? '付属品なし' : window._selAccessory.label} / ${worksLabel}`;
-    document.getElementById('selected-info').style.display = 'block';
+function diagRefresh() {
+  if (!diag) return;
+  diagStatus = document.getElementById('diag-status').value;
+  diagAcc = document.getElementById('diag-accessory').value;
+  const { low, center, high } = diagRange();
+
+  // 滑块：保留用户拖过的值，超出新区间时吸附到边界；首次用中心价
+  const slider = document.getElementById('diag-slider');
+  let cur = center;
+  if (slider.dataset.cur) {
+    cur = Number(slider.dataset.cur);
+    if (cur < low) cur = low;
+    if (cur > high) cur = high;
   }
+  slider.min = low;
+  slider.max = high;
+  slider.step = 100;
+  slider.value = cur;
+  slider.dataset.cur = String(cur);
+
+  const st = diag.status_options.find(s => s.key === diagStatus);
+  const acc = diag.accessory_options.find(a => a.key === diagAcc);
+  document.getElementById('diag-condition').textContent = `${st.label} / ${acc.label}`;
+  document.getElementById('diag-price-big').textContent = '¥' + cur.toLocaleString();
+  document.getElementById('diag-range-low').textContent = '¥' + low.toLocaleString();
+  document.getElementById('diag-range-high').textContent = '¥' + high.toLocaleString();
+
+  document.getElementById('diag-btn-new').style.cssText = diagMode === 'new'
+    ? 'flex:1; background:#2563eb; color:#fff; border-color:#2563eb;'
+    : 'flex:1;';
+  document.getElementById('diag-btn-used').style.cssText = diagMode === 'used'
+    ? 'flex:1; background:#059669; color:#fff; border-color:#059669;'
+    : 'flex:1;';
 }
 
-async function createFromSelection() {
-  const brand = document.getElementById('add-brand').value;
-  const model = document.getElementById('add-model').value;
-  const title = `${brand} ${model}`;
+function diagSetMode(mode) {
+  diagMode = mode;
+  diagRefresh();
+}
+
+function diagSlider() {
+  const v = Number(document.getElementById('diag-slider').value);
+  document.getElementById('diag-slider').dataset.cur = String(v);
+  document.getElementById('diag-price-big').textContent = '¥' + v.toLocaleString();
+}
+
+async function diagSave() {
+  const brand = document.getElementById('add-brand').value.trim();
+  const model = document.getElementById('add-model').value.trim();
+  const price = Number(document.getElementById('diag-slider').value);
+  const acc = diag.accessory_options.find(a => a.key === diagAcc);
   const r = await fetch('/api/products', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      title: title,
-      price: window._selPrice, // 用选中格子的价格
-      status: window._selStatus,
-      accessories: window._selAccessory.list,
-      works_confirmed: window._selWorks,
+      title: `${brand} ${model}`,
+      price: price,
+      status: diagStatus,
+      accessories: acc.list,
+      works_confirmed: true,
     })
   });
   const j = await r.json();
   if (j.id) {
     selectedId = j.id;
+    currentTab = 'products';
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'products'));
     loadList();
     renderDetail();
-    showToast(`商品を作成しました（¥${window._selPrice.toLocaleString()}）`);
+    showToast(`保存しました（¥${price.toLocaleString()}）`);
   } else {
-    showToast('作成失敗：' + (j.error || ''));
+    showToast('保存失敗：' + (j.error || ''));
   }
 }
 

@@ -7,7 +7,7 @@ if not exist "config\secrets.env" (
     copy "config\secrets.env.example" "config\secrets.env" >nul
     echo.
     echo [INFO] config\secrets.env created from the template.
-    echo        Edit it to fill in your Cloudflare R2 keys, then run this file again.
+    echo        Edit it to fill in your DeepSeek API key, then run this file again.
     echo.
     pause
     exit /b 1
@@ -22,7 +22,7 @@ if errorlevel 1 (
 )
 
 rem ---------- 3. install dependencies on first run ----------
-python -c "import flask, dotenv, boto3, PIL, requests" >nul 2>nul
+python -c "import flask, dotenv, PIL, requests" >nul 2>nul
 if errorlevel 1 (
     echo [INFO] Installing dependencies, please wait...
     python -m pip install -r requirements.txt

@@ -6,13 +6,12 @@
 1. 安装 Python 3.11 或 3.12（安装时勾选 Add python.exe to PATH）
    https://www.python.org/downloads/
 2. 安装 Chrome / Edge 及 Automa 扩展（扩展详情里开启"允许访问文件网址"）
-3. 注册 Cloudflare R2：
-   - 创建 bucket，例如 secondhand-ec-images
-   - 生成 Account API Token（权限 Object Read & Write，限定该 bucket）
-   - 开启 bucket 的 R2.dev 公共访问，记下 https://pub-xxxx.r2.dev
+3. 注册 DeepSeek（可选，AI 价格诊断/描述功能）：
+   - 前往 https://platform.deepseek.com 创建 API Key
+   - 配置 config\secrets.env 中 DEEPSEEK_ENABLED=true 与 DEEPSEEK_API_KEY
 4. 双击 start.bat
    - 首次运行会自动生成 config\secrets.env
-   - 关闭窗口，编辑 config\secrets.env 填入 R2 密钥
+   - 关闭窗口，编辑 config\secrets.env 填入 DeepSeek 密钥（如开启 AI 功能）
    - 再次双击 start.bat 启动
 
 二、日常使用
@@ -26,7 +25,7 @@
    - 也可在状态页手动添加测试商品
 3. 导入照片：POST /api/import_photos
    - 自动查找 DCIM，MD5 去重，压缩到长边 2000px、质量 85
-   - 保存到 images\imported\，若 CAMERA_AUTO_UPLOAD=true 自动上传 R2
+   - 保存到 images\imported\
    - 文件名「N.M.JPG」自动分组：同 N 归为同一商品（草稿），追加导入的同 N 照片自动并入
    - 保护：商品转正式后，同 N 的新照片不再自动并入（导入结果 blocked 中列出），
      需要时用 PUT /api/products/<id> 传 photo_ids 显式并入
@@ -37,7 +36,7 @@
 
 三、接口一览
 GET  /                    状态页（含添加测试商品表单）
-POST /api/import_photos   导入相机照片并上传 R2
+POST /api/import_photos   导入相机照片
 POST /api/calculate_price 价格计算（测试）
 GET  /api/products        已完善商品列表 {"data": [...]}（草稿除外，Automa 读取）
 POST /api/products        新增商品（扩展接口，便于没有相机时测试）
@@ -53,8 +52,7 @@ DELETE /api/products/<id> 删除商品（照片保留，解除关联）
 五、Automa 工作流要点
 - /api/products 返回 {"data": [...]}，与 README_项目要求.md 第 9.2 节一致
 - Automa 循环数据请填 {{ products.data }}，循环 ID 用 item
-- 图片上传用 item.image_paths（本地路径列表），浏览器模拟人工上传不需要 R2 URL；
-  item.images 是 R2 公开 URL（存档/展示用）
+- 图片上传用 item.image_paths（本地路径列表），浏览器模拟人工上传
 - 分类为必填且是三级动态选择：用 {{ item.categories[0] }}、{{ item.categories[1] }}、
   {{ item.categories[2] }} 三个点击块逐级点选（块间加 500-1000ms 延迟等列表加载）
 - 状态、配送方式等其余必填项请一并录制/填写，否则无法提交
@@ -64,4 +62,3 @@ DELETE /api/products/<id> 删除商品（照片保留，解除关联）
 - Mercari 禁止自动化批量出品，Automa 有账号风险
 - 必须人工确认后提交，每小时最多 2-3 件，随机间隔
 - 密钥只填 config\secrets.env，不要外传、不要上传 GitHub
-- 图片必须通过 R2 公共 URL 访问，否则 Mercari 无法读取

@@ -8,9 +8,7 @@ USB 存储模式连接电脑
   ↓
 Python 程序自动导入照片
   ↓
-压缩、去重、上传 Cloudflare R2
-  ↓
-生成 HTTPS 图片 URL
+压缩、去重、保存到本地 images/imported/
   ↓
 本地 SQLite 保存商品数据
   ↓
@@ -31,7 +29,6 @@ Mercari 官方禁止自动化批量操作，使用 Automa 有账号风险，必�
 | 本地服务 | Flask |
 | 数据库 | SQLite |
 | 图片处理 | Pillow |
-| 图片上传 | boto3 + Cloudflare R2 |
 | 环境变量 | python-dotenv |
 | 浏览器自动化 | Automa（Chrome / Edge 扩展） |
 | 相机 | Lumix GF9，USB 存储模式 |
@@ -58,7 +55,6 @@ SecondhandECAgent/
 │  ├─ main.py                 # Flask 主程序
 │  ├─ config.py               # 读取 secrets.env
 │  ├─ db.py                   # SQLite 初始化与连接
-│  ├─ r2_uploader.py          # Cloudflare R2 上传
 │  ├─ camera_import.py        # GF9 照片导入
 │  ├─ price_engine.py         # 价格修正规则
 │  └─ mercari_client.py       # 占位，个人卖家版不使用官方 API
@@ -96,28 +92,15 @@ SecondhandECAgent/
    ```text
    允许访问文件网址
    ```
-### 4.3 注册 Cloudflare R2
-1. 登录 `https://dash.cloudflare.com`
-2. 左侧进入 **R2 Object Storage**。
-3. 创建 bucket，例如：
-   ```text
-   secondhand-ec-images
+### 4.3 注册 DeepSeek（可选，AI 功能）
+1. 访问 `https://platform.deepseek.com` 注册并登录。
+2. 创建 API Key 并复制。
+3. 在 `config/secrets.env` 中填入：
+   ```env
+   DEEPSEEK_ENABLED=true
+   DEEPSEEK_API_KEY=你的Key
    ```
-4. 记录 **Account ID**。
-5. 在 R2 Overview → Account Details → API Tokens → Manage：
-   - 创建 **Account API token**
-   - 权限：**Object Read & Write**
-   - 限定 bucket：`secondhand-ec-images`
-   - 生成后立刻复制：
-     - `R2_ACCESS_KEY_ID`
-     - `R2_SECRET_ACCESS_KEY`
-6. 进入 bucket → Settings → Public access：
-   - 开启 **R2.dev subdomain**
-   - 得到类似：
-     ```text
-     https://pub-xxxxxxxxxxxx.r2.dev
-     ```
-   - 这就是 `R2_PUBLIC_BASE_URL`，末尾不要加 `/`。
+   DeepSeek 未配置时 AI 功能不开启，价格诊断会使用默认参考价。
 ### 4.4 准备 Mercari 账号
 个人卖家账号即可，不需要 Mercari Shops API。  
 Automa 将模拟人工操作网页。
@@ -130,21 +113,12 @@ MERCARI_ENV=production
 MERCARI_ACCESS_TOKEN=
 MERCARI_SHOP_ID=
 MERCARI_BASE_URL=https://api.mercari-shops.com
-# ========== Cloudflare R2 ==========
-IMAGE_STORAGE=r2
-R2_ACCOUNT_ID=你的AccountID
-R2_ACCESS_KEY_ID=你的AccessKeyID
-R2_SECRET_ACCESS_KEY=你的SecretAccessKey
-R2_BUCKET=secondhand-ec-images
-R2_PUBLIC_BASE_URL=https://pub-xxxxxxxxxxxx.r2.dev
 # ========== 相机 Lumix GF9 USB 存储模式 ==========
 CAMERA_MODE=usb_storage
 CAMERA_AUTO_DETECT=true
 CAMERA_DRIVE=auto
 CAMERA_DCIM_SUBDIR=DCIM
 CAMERA_IMPORT_DIR=./images/imported
-CAMERA_AUTO_UPLOAD=true
-CAMERA_DELETE_AFTER_UPLOAD=false
 CAMERA_JPEG_QUALITY=85
 CAMERA_MAX_LONG_EDGE=2000
 # ========== DeepSeek API（可选，默认关闭） ==========
@@ -163,7 +137,6 @@ APP_PORT=8765
 flask==3.0.3
 python-dotenv==1.0.1
 requests==2.32.3
-boto3==1.35.0
 Pillow==12.0.0
 pyinstaller==6.22.3
 ```
@@ -177,25 +150,19 @@ pip install -r requirements.txt
 ## 7. Python 模块功能要求
 ### 7.1 `app/config.py`
 - 读取 `config/secrets.env`
-- 提供 `Config` 类，包含 Mercari、R2、相机、DeepSeek、本地服务配置
+- 提供 `Config` 类，包含 Mercari、相机、DeepSeek、本地服务配置
 - `Config.check_ready()` 检查关键配置是否缺失
 ### 7.2 `app/db.py`
 - 初始化 SQLite 数据库 `data/app.db`
-- 表 `photos`：保存导入照片的本地路径、R2 URL、文件哈希、商品 ID
+- 表 `photos`：保存导入照片的本地路径、文件哈希、商品 ID
 - 表 `products`：保存商品标题、价格、状态、描述、Mercari ID
 - 提供 `get_db()` 返回可像字典访问的行
-### 7.3 `app/r2_uploader.py`
-- 使用 boto3 连接 Cloudflare R2
-- `endpoint_url = https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`
-- `region_name = 'auto'`
-- `upload_to_r2(local_path, key)` 上传文件并返回 HTTPS URL
-### 7.4 `app/camera_import.py`
+### 7.3 `app/camera_import.py`
 - 自动查找相机盘符：遍历盘符，找存在 `DCIM` 的盘
 - 扫描 `DCIM` 下所有 `.JPG` / `.JPEG`
 - 用 MD5 去重，已导入的跳过
 - 用 Pillow 自动旋转、转 RGB、压缩到长边 2000px、质量 85
 - 保存到 `images/imported/`
-- 如果 `CAMERA_AUTO_UPLOAD=true`，自动上传 R2
 - 写入 `photos` 表
 - **按文件名自动分组**：文件名「N.M.jpg」（N=商品号，M=张号）的照片，导入时同 N 自动归为同一商品
   （全局连续编号），自动创建/关联**草稿商品**（标题占位「商品 N」、价格 0、`is_draft=1`）并挂接照片；
@@ -203,7 +170,7 @@ pip install -r requirements.txt
 - 返回 `{status, imported, photos, products, blocked}`
 - **保护规则**：商品已转正式（`is_draft=0`）后，同 N 的新照片**不再自动并入**（进入 `blocked` 列表），
   需要时通过 `PUT /api/products/<id>` 传 `photo_ids` 显式并入
-### 7.5 `app/price_engine.py`
+### 7.4 `app/price_engine.py`
 - 根据 Mercari 商品状态和附件计算推荐价格区间
 - 状态系数：
   ```text
@@ -216,12 +183,12 @@ pip install -r requirements.txt
   ```
 - 附件加分：箱子 +0.05，说明书 +0.02，充电器 +0.03，其他配件 +0.02
 - 返回 `{low, center, high, multiplier}`
-### 7.6 `app/main.py`
+### 7.5 `app/main.py`
 提供本地 HTTP 接口：
 | 接口 | 方法 | 功能 |
 |---|---|---|
 | `/` | GET | 简单状态页面 |
-| `/api/import_photos` | POST | 导入相机照片并上传 R2 |
+| `/api/import_photos` | POST | 导入相机照片 |
 | `/api/calculate_price` | POST | 测试价格计算 |
 | `/api/products` | GET | 返回**已完善**商品列表（草稿除外），供 Automa 读取 |
 | `/api/products/<id>` | PUT | 更新商品并**自动转正式**（草稿在此完善标题/价格/描述）；可传 `photo_ids` 显式并入照片 |
@@ -237,7 +204,7 @@ pip install -r requirements.txt
   "status": "CLEAN",
   "description": "商品描述",
   "images": [
-    "https://pub-xxxx.r2.dev/products/1/xxxx.jpg"
+    "D:\\PROJECTS\\SecondhandECAgent\\images\\imported\\xxxx.jpg"
   ],
   "image_paths": [
     "D:\\PROJECTS\\SecondhandECAgent\\images\\imported\\xxxx.jpg"
@@ -248,7 +215,7 @@ pip install -r requirements.txt
 分类说明：`categories` 为数组（大类→中类→小类），Automa 逐级点选用；POST/PUT 可传数组或字符串
 `"レディース > トップス > Tシャツ/カットソー"`（`>` 分隔自动拆分）。
 ```
-### 7.7 `app/mercari_client.py`
+### 7.6 `app/mercari_client.py`
 个人卖家版**不使用官方 API**，此文件仅作占位。  
 Automa 负责网页自动化，不需要真实 Mercari API 调用。
 ---
@@ -261,7 +228,7 @@ Automa 负责网页自动化，不需要真实 Mercari API 调用。
 3. 拍照格式建议 JPEG；如果拍 RAW+JPEG，程序只导入 JPG。
 4. 拍完用 USB 线连接电脑。
 5. Windows 识别为可移动磁盘，程序自动扫描 `DCIM`。
-6. 导入后照片保存在 `images/imported/`，并上传 R2。
+6. 导入后照片保存在 `images/imported/`。
 7. **推荐命名**：导入前把照片改名为「商品号.张号.JPG」（如 `1.1.JPG`、`1.2.JPG`、`1.3.JPG` 属于商品 1，
    `2.1.JPG`、`2.2.JPG` 属于商品 2），同商品号自动归为一组并生成草稿商品；
    不匹配规则的照片（相机默认命名）不分组。
@@ -350,14 +317,10 @@ dist\SecondhandECAgent\
 ## 11. 复刻验收清单
 - [ ] Windows 10/11 已安装 Python 3.11/3.12，并勾选 Add to PATH
 - [ ] `pip install -r requirements.txt` 成功
-- [ ] Cloudflare R2 bucket 已创建
-- [ ] R2 API Token 已生成，Access Key / Secret 已填入 `secrets.env`
-- [ ] R2.dev 公共访问已开启，`R2_PUBLIC_BASE_URL` 已填
 - [ ] `config/secrets.env` 已填写，且未外传
 - [ ] 双击 `start.bat` 能启动 Flask，访问 `http://127.0.0.1:8765`
 - [ ] GF9 设为 PC(Storage)，USB 连接后程序能扫描到 DCIM
 - [ ] 导入照片后，`images/imported/` 有压缩后的 JPG
-- [ ] 照片已上传 R2，返回 HTTPS URL
 - [ ] SQLite `products` 表中有测试商品数据
 - [ ] `/api/products` 返回正确 JSON
 - [ ] Automa 已安装，允许访问文件网址
@@ -370,9 +333,7 @@ dist\SecondhandECAgent\
 1. 个人卖家无法使用 Mercari Shops 官方 API，所以放弃 API 自动上架，改用 Automa。
 2. Automa 自动化违反 Mercari 服务条款，有账号风险，必须人工确认、低频操作。
 3. GF9 不支持 USB 联机拍摄，只能手动拍完再连接电脑导入。
-4. R2.dev 子域名适合开发测试，流量大时建议以后绑自定义域名。
-5. 图片必须通过 R2 公共 URL 访问，否则 Mercari 无法读取。
-6. 项目中的 `mercari_client.py` 仅为占位，个人卖家版不调用。
+4. 项目中的 `mercari_client.py` 仅为占位，个人卖家版不调用。
 ---
 ## 13. 下一步建议
 1. 先在新电脑安装 Python 3.11/3.12。

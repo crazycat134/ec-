@@ -1,4 +1,4 @@
-"""Lumix GF9 照片导入：查找 DCIM → MD5 去重 → Pillow 压缩 → 可选上传 R2 → 写入 photos 表。
+"""Lumix GF9 照片导入：查找 DCIM → MD5 去重 → Pillow 压缩 → 写入 photos 表。
 
 按文件名分组：形如「1.1.JPG」「1.2.JPG」的照片，小数点前为商品号、小数点后为张号，
 导入时自动按商品号创建/关联商品，便于 Automa 直接读取分组数据。
@@ -13,7 +13,6 @@ from PIL import Image, ImageOps
 
 from . import db
 from .config import PROJECT_ROOT
-from .r2_uploader import upload_to_r2
 
 JPEG_EXTS = (".jpg", ".jpeg")
 PRODUCT_NAME_RE = re.compile(r"^(\d+)\.(\d+)$")
@@ -110,25 +109,16 @@ def import_photos(cfg):
                 dest = import_dir / f"{file_hash[:8]}.jpg"
                 process_image(src, dest, cfg.camera_max_long_edge, cfg.camera_jpeg_quality)
 
-                r2_url = None
-                if cfg.camera_auto_upload:
-                    try:
-                        r2_url = upload_to_r2(cfg, dest, f"products/{dest.name}")
-                    except Exception as exc:  # 单个上传失败不阻断整体导入
-                        r2_url = None
-                        print(f"[warn] R2 上传失败，已跳过（{exc}）")
-
                 cur = conn.execute(
-                    "INSERT INTO photos (local_path, r2_url, file_hash, product_no, photo_no) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (str(dest), r2_url, file_hash, product_no, photo_no),
+                    "INSERT INTO photos (local_path, file_hash, product_no, photo_no) "
+                    "VALUES (?, ?, ?, ?)",
+                    (str(dest), file_hash, product_no, photo_no),
                 )
                 seen.add(file_hash)
                 imported.append(str(dest))
                 photos.append({
                     "id": cur.lastrowid,
                     "local_path": str(dest),
-                    "r2_url": r2_url,
                     "file_hash": file_hash,
                     "product_no": product_no,
                     "photo_no": photo_no,

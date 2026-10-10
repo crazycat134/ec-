@@ -192,16 +192,49 @@ def api_generate_checklist():
         return jsonify({"error": f"DeepSeek 调用失败: {e}"}), 500
 
 
+# 价格诊断：商品状态系数（与 price_engine 保持一致）
+DIAG_STATUS_OPTIONS = [
+    {"key": "BRAND_NEW", "label": "新品・未使用", "mult": 1.00},
+    {"key": "ALMOST_NEW", "label": "目立った傷や汚れなし", "mult": 0.95},
+    {"key": "LITTLE_DIRTY", "label": "やや傷や汚れあり", "mult": 0.85},
+]
+
+# 价格诊断：附属品选项（bonus 与 price_engine.ACCESSORY_BONUS 合计一致；
+# 箱・説明書 为二手标配，选项不显示但保存时自动带上）
+DIAG_ACCESSORY_OPTIONS = [
+    {"key": "none", "label": "付属品なし", "bonus": 0.07, "list": ["box", "manual"]},
+    {"key": "charger", "label": "充電器", "bonus": 0.10, "list": ["box", "manual", "charger"]},
+]
+
+
 @app.route("/api/suggest_price", methods=["POST"])
 def api_suggest_price():
-    """根据品牌+型号，AI 给出全新品参考价格"""
+    """根据品牌+型号，AI 调查各平台（新品/中古）实势价格。
+
+    返回：
+    {
+      "new": {"amazon": {price,low,high}, "rakuten": {...}},
+      "used": {"mercari": {...}, "yahoo": {...}},
+      "new_base": int, "used_base": int,
+      "status_options": [...], "accessory_options": [...],
+      "note": "..."
+    }
+    """
     body = request.get_json(force=True) or {}
     brand = (body.get("brand") or "").strip()
     model = (body.get("model") or "").strip()
     if not brand or not model:
         return jsonify({"error": "brand 和 model は必須です"}), 400
     try:
-        result = deepseek_client.suggest_new_price(cfg, brand, model)
+        result = deepseek_client.suggest_prices(cfg, brand, model)
+        # 附属品选项：AI 按商品生成优先，否则用默认；统一计算加分
+        if not result.get("accessory_options"):
+            result["accessory_options"] = DIAG_ACCESSORY_OPTIONS
+        for acc in result["accessory_options"]:
+            acc["bonus"] = round(
+                sum(price_engine.ACCESSORY_BONUS.get(k, 0.0) for k in acc.get("list", [])), 4
+            )
+        result["status_options"] = DIAG_STATUS_OPTIONS
         return jsonify(result)
     except Exception as e:
         log.exception("DeepSeek suggest price failed")
@@ -222,12 +255,10 @@ def api_products():
         result = []
         for p in rows:
             photos = conn.execute(
-                "SELECT r2_url, local_path FROM photos WHERE product_id = ? ORDER BY photo_no",
+                "SELECT local_path FROM photos WHERE product_id = ? ORDER BY photo_no",
                 (p["id"],),
             ).fetchall()
-            # 优先 R2 公共 URL；未上传时回退本地路径
-            images = [ph["r2_url"] or ph["local_path"] for ph in photos]
-            # Automa 上传图片用本地路径（浏览器模拟人工上传，不依赖 R2 URL）
+            # Automa 上传图片用本地路径（浏览器模拟人工上传）
             image_paths = [ph["local_path"] for ph in photos]
             result.append({
                 "id": p["id"],
@@ -239,7 +270,7 @@ def api_products():
                 "confirmed": bool(p["confirmed"]),
                 "works_confirmed": bool(p["works_confirmed"]),
                 "accessories": json.loads(p["accessories"]) if p["accessories"] else [],
-                "images": images,
+                "images": image_paths,
                 "image_paths": image_paths,
                 "categories": _read_categories(p["categories"]),
                 "mercari_status": _mercari_status(p["status"]),
@@ -266,12 +297,16 @@ def api_create_product():
     description = str(data.get("description") or "")
     photo_ids = data.get("photo_ids") or []
     categories = _parse_categories(data.get("categories") or [])
+    works_confirmed = 1 if data.get("works_confirmed") else 0
+    accessories = json.dumps(data.get("accessories") or [], ensure_ascii=False)
 
     conn = db.get_db()
     try:
         cur = conn.execute(
-            "INSERT INTO products (title, price, status, description, categories) VALUES (?, ?, ?, ?, ?)",
-            (title, price, status, description, json.dumps(categories, ensure_ascii=False)),
+            "INSERT INTO products (title, price, status, description, categories, works_confirmed, accessories) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (title, price, status, description, json.dumps(categories, ensure_ascii=False),
+             works_confirmed, accessories),
         )
         product_id = cur.lastrowid
         for pid in photo_ids:
@@ -368,10 +403,10 @@ def api_drafts():
         result = []
         for p in rows:
             photos = conn.execute(
-                "SELECT r2_url, local_path FROM photos WHERE product_id = ? ORDER BY photo_no",
+                "SELECT local_path FROM photos WHERE product_id = ? ORDER BY photo_no",
                 (p["id"],),
             ).fetchall()
-            images = [ph["r2_url"] or ph["local_path"] for ph in photos]
+            images = [ph["local_path"] for ph in photos]
             result.append({
                 "id": p["id"],
                 "product_no": p["product_no"],

@@ -10,7 +10,6 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS photos (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     local_path  TEXT NOT NULL,
-    r2_url      TEXT,
     file_hash   TEXT NOT NULL UNIQUE,
     product_id  INTEGER,
     product_no  INTEGER,

@@ -10,10 +10,14 @@ STATUS_MULTIPLIERS = {
 }
 
 ACCESSORY_BONUS = {
-    "box": 0.05,      # 箱子
-    "manual": 0.02,   # 说明书
+    "box": 0.05,      # 箱子（二手标配，自动带上）
+    "manual": 0.02,   # 说明书（二手标配，自动带上）
     "charger": 0.03,  # 充电器
     "other": 0.02,    # 其他配件
+    "battery": 0.03,  # 电池
+    "lens_cap": 0.02, # 镜头盖
+    "strap": 0.01,    # 背带
+    "cable": 0.02,    # 线缆
 }
 
 
