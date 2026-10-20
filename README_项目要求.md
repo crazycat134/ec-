@@ -1,40 +1,17 @@
-# Secondhand EC Agent V3 个人卖家复刻版
-## 1. 项目目标
-做一个 **Windows 10/11 可用的半自动化二手商品上架辅助系统**：
-```text
-Lumix GF9 手动拍照
-  ↓
-USB 存储模式连接电脑
-  ↓
-Python 程序自动导入照片
-  ↓
-压缩、去重、保存到本地 images/imported/
-  ↓
-本地 SQLite 保存商品数据
-  ↓
-Automa 从本地接口读取商品数据
-  ↓
-自动打开 Mercari 出品页，填写标题、价格、描述、图片
-  ↓
-你人工确认后提交
-```
-因为个人卖家没有 Mercari Shops 官方 API，所以**不使用官方 API 自动上架**，改用 **Automa 浏览器自动化**辅助填表。  
-Mercari 官方禁止自动化批量操作，使用 Automa 有账号风险，必须控制频率、人工确认。
----
-## 2. 技术栈
+# Secondhand EC Agent  
+
+## 1. 技术栈
 | 部分 | 技术 |
 |---|---|
 | 操作系统 | Windows 10 / 11 x64 |
 | 编程语言 | Python 3.11 或 3.12 |
 | 本地服务 | Flask |
 | 数据库 | SQLite |
-| 图片处理 | Pillow |
 | 环境变量 | python-dotenv |
 | 浏览器自动化 | Automa（Chrome / Edge 扩展） |
-| 相机 | Lumix GF9，USB 存储模式 |
-| 可选 AI | DeepSeek API，默认关闭 |
+| AI | DeepSeek API |
 ---
-## 3. 项目目录结构
+## 2. 项目目录结构
 项目根目录建议：
 ```text
 D:\PROJECTS\SecondhandECAgent
@@ -45,7 +22,6 @@ SecondhandECAgent/
 ├─ start.bat                  # 启动本地服务
 ├─ build.bat                  # 打包成 Windows 便携版
 ├─ requirements.txt           # Python 依赖
-├─ README_启动说明.txt
 ├─ README_项目要求.md          # 本文档
 ├─ config/
 │  ├─ secrets.env.example     # 配置模板
@@ -87,8 +63,7 @@ SecondhandECAgent/
 ### 4.2 安装浏览器与 Automa
 1. 安装 Chrome 或 Edge。
 2. 在扩展商店搜索 **Automa**，安装。
-3. 打开 Automa，将界面语言切换为中文。
-4. 在 `chrome://extensions` 中，找到 Automa → 详情 → 开启：
+3. 在 `chrome://extensions` 中，找到 Automa → 详情 → 开启：
    ```text
    允许访问文件网址
    ```
