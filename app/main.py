@@ -1,4 +1,4 @@
-"""Flask 主程序：提供本地 HTTP 接口（状态页 / 照片导入 / 价格计算 / 商品列表）。"""
+"""本地 Flask 应用：提供商品管理、价格参考和 AI 辅助接口。"""
 import json
 import logging
 import sys
@@ -6,7 +6,6 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 
-from . import camera_import
 from . import db
 from . import deepseek_client
 from . import price_engine
@@ -15,7 +14,7 @@ from .config import Config, PROJECT_ROOT
 cfg = Config()
 app = Flask(__name__)
 
-# ---------- 日志 ----------
+# 日志写入项目目录下的 logs/app.log。
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -30,15 +29,18 @@ db.init_db()
 
 @app.after_request
 def _cors(resp):
-    """允许 Automa 浏览器扩展跨域读取本地接口。"""
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    """仅向配置过的来源开放 CORS，避免任意网站访问本地 API。"""
+    origin = request.headers.get("Origin", "").rstrip("/")
+    resp.vary.add("Origin")
+    if origin and origin in cfg.app_allowed_origins:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return resp
 
 STATUS_OPTIONS = "".join(f"<option>{s}</option>" for s in price_engine.STATUS_MULTIPLIERS)
 
-# 本地英文状态 -> Mercari 出品页「商品の状態」日文本选项
+# 内部状态码到 Mercari 页面状态文案的映射；实际提交由 Automa 工作流处理。
 STATUS_TO_MERCARI = {
     "BRAND_NEW": "新品、未使用",
     "ALMOST_NEW": "目立った傷や汚れなし",
@@ -74,7 +76,7 @@ def _read_categories(raw) -> list:
 
 
 def _read_template() -> str:
-    """查找状态页模板：冻结（PyInstaller）时优先从 _MEIPASS 内读取。"""
+    """读取状态页 HTML 模板；打包运行时先检查 PyInstaller 的资源目录。"""
     candidates = []
     if getattr(sys, "frozen", False):
         meipass = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
@@ -103,8 +105,9 @@ def _status_page(ready_text, ready_cls, product_count, photo_count, next_no) -> 
     )
 
 
+
 def _max_product_no(conn) -> int:
-    """返回当前最大的商品号（全局连续编号的基准）。"""
+    """返回当前最大的商品编号，作为新增商品编号的基准。"""
     rows = conn.execute("SELECT product_no FROM products WHERE product_no IS NOT NULL").fetchall()
     return max((r["product_no"] for r in rows), default=0)
 
@@ -126,27 +129,6 @@ def index():
         ready_text = "就绪"
         ready_cls = "ok"
     return _status_page(ready_text, ready_cls, product_count, photo_count, next_no)
-
-
-@app.route("/api/import_photos", methods=["POST"])
-def api_import_photos():
-    result = camera_import.import_photos(cfg)
-    log.info("import_photos -> status=%s imported=%d", result["status"], len(result["imported"]))
-    return jsonify(result)
-
-
-@app.route("/api/calculate_price", methods=["POST"])
-def api_calculate_price():
-    data = request.get_json(silent=True) or {}
-    try:
-        base_price = int(data.get("base_price", 0))
-    except (TypeError, ValueError):
-        return jsonify({"error": "base_price 必须是整数"}), 400
-    status = str(data.get("status", "CLEAN")).upper()
-    if status not in price_engine.STATUS_MULTIPLIERS:
-        return jsonify({"error": f"status 必须是 {list(price_engine.STATUS_MULTIPLIERS)} 之一"}), 400
-    accessories = data.get("accessories") or []
-    return jsonify(price_engine.calculate_price(base_price, status, accessories))
 
 
 @app.route("/api/generate_description", methods=["POST"])
@@ -175,31 +157,14 @@ def api_generate_description():
         return jsonify({"error": f"DeepSeek 调用失败: {e}"}), 500
 
 
-@app.route("/api/generate_checklist", methods=["POST"])
-def api_generate_checklist():
-    """DeepSeek AI 根据商品标题生成标准检查清单（动作确认项 + 标准附件）。"""
-    data = request.get_json(silent=True) or {}
-    title = str(data.get("title", "")).strip()
-    if not title:
-        return jsonify({"error": "title 不能为空"}), 400
-    try:
-        result = deepseek_client.generate_checklist(cfg, title)
-        return jsonify(result)
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        log.exception("DeepSeek checklist failed")
-        return jsonify({"error": f"DeepSeek 调用失败: {e}"}), 500
-
-
-# 价格诊断：商品状态系数（与 price_engine 保持一致）
+# 价格建议界面使用的状态选项；系数用于界面展示，计算由 price_engine 负责。
 DIAG_STATUS_OPTIONS = [
     {"key": "BRAND_NEW", "label": "新品・未使用", "mult": 1.00},
     {"key": "ALMOST_NEW", "label": "目立った傷や汚れなし", "mult": 0.95},
     {"key": "LITTLE_DIRTY", "label": "やや傷や汚れあり", "mult": 0.85},
 ]
 
-# 价格诊断：附属品选项（bonus 与 price_engine.ACCESSORY_BONUS 合计一致；
+# 价格建议界面的默认附件组合；实际加成统一从 price_engine.ACCESSORY_BONUS 计算。
 # 箱・説明書 为二手标配，选项不显示但保存时自动带上）
 DIAG_ACCESSORY_OPTIONS = [
     {"key": "none", "label": "付属品なし", "bonus": 0.07, "list": ["box", "manual"]},
@@ -209,7 +174,7 @@ DIAG_ACCESSORY_OPTIONS = [
 
 @app.route("/api/suggest_price", methods=["POST"])
 def api_suggest_price():
-    """根据品牌+型号，AI 调查各平台（新品/中古）实势价格。
+    """根据品牌和型号请求模型生成新品/中古价格参考；不是直接抓取电商平台实时数据。
 
     返回：
     {
@@ -227,7 +192,7 @@ def api_suggest_price():
         return jsonify({"error": "brand 和 model は必須です"}), 400
     try:
         result = deepseek_client.suggest_prices(cfg, brand, model)
-        # 附属品选项：AI 按商品生成优先，否则用默认；统一计算加分
+        # 若模型未返回附件选项则使用默认组合；每个组合的加成由统一规则重新计算。
         if not result.get("accessory_options"):
             result["accessory_options"] = DIAG_ACCESSORY_OPTIONS
         for acc in result["accessory_options"]:
@@ -243,13 +208,12 @@ def api_suggest_price():
 
 @app.route("/api/products", methods=["GET"])
 def api_products():
-    """返回商品列表（{"data": [...]}），供 Automa 循环读取。
-    默认只返回 confirmed=1 的已确认商品；加 ?all=1 返回所有正式商品（状态页用）。"""
+    """返回商品数据供 Automa 读取。默认仅返回已确认商品；?all=1 返回所有记录，包括旧版本草稿。"""
     all_flag = request.args.get("all", "0").lower() in ("1", "true", "yes")
     conn = db.get_db()
     try:
         if all_flag:
-            rows = conn.execute("SELECT * FROM products WHERE is_draft = 0 ORDER BY id DESC").fetchall()
+            rows = conn.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
         else:
             rows = conn.execute("SELECT * FROM products WHERE is_draft = 0 AND confirmed = 1 ORDER BY id DESC").fetchall()
         result = []
@@ -258,7 +222,7 @@ def api_products():
                 "SELECT local_path FROM photos WHERE product_id = ? ORDER BY photo_no",
                 (p["id"],),
             ).fetchall()
-            # Automa 上传图片用本地路径（浏览器模拟人工上传）
+            # 返回照片本地路径，供本机配置的 Automa 工作流使用。
             image_paths = [ph["local_path"] for ph in photos]
             result.append({
                 "id": p["id"],
@@ -282,7 +246,7 @@ def api_products():
 
 @app.route("/api/products", methods=["POST"])
 def api_create_product():
-    """扩展接口：手动/测试新增商品，便于在没有相机时验证 Automa 流程。"""
+    """创建商品记录；可用于手动录入或测试，不会直接发布商品。"""
     data = request.get_json(silent=True) or {}
     title = str(data.get("title") or "").strip()
     if not title:
@@ -320,7 +284,7 @@ def api_create_product():
 
 @app.route("/api/products/<int:pid>", methods=["PUT"])
 def api_update_product(pid):
-    """更新商品（标题/价格/状态/描述），供导入分组后完善商品信息。"""
+    """更新商品字段，并可将照片关联到商品。传入普通字段时会将商品转为正式记录。"""
     data = request.get_json(silent=True) or {}
     conn = db.get_db()
     try:
@@ -368,7 +332,7 @@ def api_update_product(pid):
             fields.append("is_draft = 0")  # 保存即转正式（Automa 才能读取）
             values.append(pid)
             conn.execute(f"UPDATE products SET {', '.join(fields)} WHERE id = ?", values)
-        # 显式并入照片（保护规则下被拦截的照片，可在此手动挂到商品）
+        # 将指定照片关联到该商品；调用前应确认照片归属正确。
         for photo_id in (data.get("photo_ids") or []):
             conn.execute("UPDATE photos SET product_id = ? WHERE id = ?", (pid, int(photo_id)))
         conn.commit()
@@ -393,34 +357,3 @@ def api_delete_product(pid):
     log.info("delete_product -> id=%d", pid)
     return jsonify({"ok": True})
 
-
-@app.route("/api/drafts", methods=["GET"])
-def api_drafts():
-    """草稿商品列表（照片按「N.M」命名导入时自动生成），完善后经 PUT 转正式。"""
-    conn = db.get_db()
-    try:
-        rows = conn.execute("SELECT * FROM products WHERE is_draft = 1 ORDER BY product_no").fetchall()
-        result = []
-        for p in rows:
-            photos = conn.execute(
-                "SELECT local_path FROM photos WHERE product_id = ? ORDER BY photo_no",
-                (p["id"],),
-            ).fetchall()
-            images = [ph["local_path"] for ph in photos]
-            result.append({
-                "id": p["id"],
-                "product_no": p["product_no"],
-                "title": p["title"],
-                "price": p["price"],
-                "status": p["status"],
-                "description": p["description"],
-                "images": images,
-                "photo_count": len(photos),
-                "categories": _read_categories(p["categories"]),
-                "mercari_status": _mercari_status(p["status"]),
-                "is_draft": True,
-            })
-        next_no = _max_product_no(conn) + 1
-    finally:
-        conn.close()
-    return jsonify({"data": result, "next_no": next_no})

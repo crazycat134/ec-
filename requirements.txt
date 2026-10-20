@@ -1,8 +1,6 @@
 # Secondhand EC Agent V3 依赖
-# 注：文档原固定版本 Pillow==10.4.0 / pyinstaller==6.10.0 仅支持 Python <= 3.13。
-# 本机为 Python 3.14，以下 3.14 兼容版本在 3.11/3.12/3.14 上均可安装。
+# PyInstaller 版本兼容 Python 3.11、3.12 和 3.14。
 flask==3.0.3
 python-dotenv==1.0.1
 requests==2.32.3
-Pillow==12.0.0
 pyinstaller==6.22.3

@@ -1,11 +1,11 @@
-"""读取 config/secrets.env 并提供项目全部配置。"""
+"""加载本地环境配置，并提供服务和 AI 客户端所需的参数。"""
 import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# 打包（PyInstaller）后以 exe 所在目录为项目根；源码运行时以 app/ 的上级目录为根
+# 源码运行时以仓库根目录为基准；打包运行时以可执行文件所在目录为基准。
 if getattr(sys, "frozen", False):
     PROJECT_ROOT = Path(sys.executable).resolve().parent
 else:
@@ -30,38 +30,28 @@ def _as_int(value: str, default: int) -> int:
 
 
 class Config:
-    """集中管理 Mercari、相机、DeepSeek、本地服务配置。"""
+    """集中管理 DeepSeek 和本地服务配置。"""
 
     def __init__(self, env_file=None):
-        # override=False：已存在的系统环境变量优先，便于测试时临时覆盖
+        # 不覆盖已存在的系统环境变量，让部署环境变量优先于 env 文件。
         load_dotenv(env_file or SECRETS_FILE, override=False)
 
-        # ---------- Mercari Shops（个人卖家版留空，不使用官方 API） ----------
-        self.mercari_env = os.getenv("MERCARI_ENV", "production")
-        self.mercari_access_token = os.getenv("MERCARI_ACCESS_TOKEN", "")
-        self.mercari_shop_id = os.getenv("MERCARI_SHOP_ID", "")
-        self.mercari_base_url = os.getenv("MERCARI_BASE_URL", "https://api.mercari-shops.com")
-
-        # ---------- 相机 Lumix GF9 USB 存储模式 ----------
-        self.camera_mode = os.getenv("CAMERA_MODE", "usb_storage").strip()
-        self.camera_auto_detect = _as_bool(os.getenv("CAMERA_AUTO_DETECT"), True)
-        self.camera_drive = os.getenv("CAMERA_DRIVE", "auto").strip()
-        self.camera_dcim_subdir = os.getenv("CAMERA_DCIM_SUBDIR", "DCIM").strip()
-        self.camera_import_dir = os.getenv("CAMERA_IMPORT_DIR", "./images/imported").strip()
-        self.camera_jpeg_quality = _as_int(os.getenv("CAMERA_JPEG_QUALITY"), 85)
-        self.camera_max_long_edge = _as_int(os.getenv("CAMERA_MAX_LONG_EDGE"), 2000)
-
-        # ---------- DeepSeek API（可选，默认关闭） ----------
+        # DeepSeek API：默认关闭；启用后需配置 API Key。
         self.deepseek_enabled = _as_bool(os.getenv("DEEPSEEK_ENABLED"), False)
         self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
         self.deepseek_base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip()
         self.deepseek_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
 
-        # ---------- 本地服务 ----------
+        # 本地 Flask 服务监听地址与端口。
         self.app_host = os.getenv("APP_HOST", "127.0.0.1").strip()
         self.app_port = _as_int(os.getenv("APP_PORT"), 8765)
+        # 仅允许明确列出的网页/扩展跨域访问本地 API，避免任意网站读取或调用本地数据。
+        origins = os.getenv("APP_ALLOWED_ORIGINS", "http://127.0.0.1:8765,http://localhost:8765")
+        self.app_allowed_origins = {origin.strip().rstrip("/") for origin in origins.split(",") if origin.strip()}
 
     def check_ready(self) -> list:
-        """检查关键配置是否缺失，返回缺失项列表（空列表表示就绪）。"""
+        """返回已启用功能所缺少的必要配置项。"""
         missing = []
+        if self.deepseek_enabled and not self.deepseek_api_key:
+            missing.append("DEEPSEEK_API_KEY（启用 DeepSeek 时必填）")
         return missing

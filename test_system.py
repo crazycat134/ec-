@@ -1,227 +1,154 @@
+"""对商品 API、确认过滤、价格诊断和 CORS 来源白名单进行轻量测试。
+
+运行：python test_system.py
+
+测试使用临时 SQLite 数据库，并模拟 AI 客户端调用；不需要先启动 Flask 服务，
+也不会请求真实 DeepSeek API。
 """
-Secondhand EC Agent V3 - 系统测试脚本
-按照大厂测试逻辑：功能测试 + 边界测试 + 流程测试 + 回归测试
-"""
-import requests
-import json
-import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-BASE = "http://127.0.0.1:8765"
-passed = 0
-failed = 0
-errors = []
+from app import db
 
-def test(name, condition, detail=""):
-    global passed, failed
-    if condition:
-        print(f"  ✅ {name}")
-        passed += 1
-    else:
-        print(f"  ❌ {name} - {detail}")
-        failed += 1
-        errors.append(f"{name}: {detail}")
+# main 模块导入时会初始化数据库；提前替换数据库路径，避免测试读写实际数据。
+_TEMP_DIR = tempfile.TemporaryDirectory(prefix="ec_test_")
+db.DB_PATH = Path(_TEMP_DIR.name) / "test.db"
 
-def section(title):
-    print(f"\n{'='*50}")
-    print(f"📋 {title}")
-    print(f"{'='*50}")
+from app import main  # noqa: E402
 
-# ========== 1. 基础连通性测试 ==========
-section("1. 基础连通性")
 
-try:
-    r = requests.get(f"{BASE}/", timeout=5)
-    test("首页能打开", r.status_code == 200, f"status={r.status_code}")
-    test("首页有标题", "Secondhand EC Agent" in r.text, "")
-    test("首页有全选按钮", "select-all" in r.text, "")
-    test("首页有批量操作栏", "batch-bar" in r.text, "")
-    test("首页有添加按钮", "showAddForm" in r.text, "")
-except Exception as e:
-    test("首页能打开", False, str(e))
+class ApiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.client = main.app.test_client()
 
-# ========== 2. 商品 CRUD 测试 ==========
-section("2. 商品 CRUD")
+    def setUp(self):
+        # 每个 API 测试使用新建的临时数据库，避免测试数据相互影响。
+        if db.DB_PATH.exists():
+            db.DB_PATH.unlink()
+        db.init_db()
 
-# 创建商品
-try:
-    r = requests.post(f"{BASE}/api/products", json={
-        "title": "测试商品_TestProduct",
-        "price": 29800,
-        "status": "CLEAN"
-    }, timeout=5)
-    data = r.json()
-    test("创建商品成功", r.status_code in [200, 201] and "id" in data, str(data))
-    test_id = data.get("id")
-except Exception as e:
-    test("创建商品成功", False, str(e))
-    test_id = None
+    def test_home_page_returns_html(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Secondhand EC Agent", response.data)
 
-# 获取商品列表
-try:
-    r = requests.get(f"{BASE}/api/products?all=1", timeout=5)
-    data = r.json()
-    test("获取商品列表", r.status_code == 200 and "data" in data, str(data)[:100])
-    test("列表是数组", isinstance(data.get("data"), list), "")
-except Exception as e:
-    test("获取商品列表", False, str(e))
+    def test_removed_routes_are_not_available(self):
+        # 已删除的接口（照片导入、草稿、规则价格计算、检查清单）应返回 404
+        self.assertEqual(self.client.post("/api/import_photos").status_code, 404)
+        self.assertEqual(self.client.get("/api/drafts").status_code, 404)
+        self.assertEqual(self.client.post("/api/calculate_price", json={"base_price": 1000}).status_code, 404)
+        self.assertEqual(self.client.post("/api/generate_checklist", json={"title": "Test"}).status_code, 404)
 
-# 更新商品
-if test_id:
-    try:
-        r = requests.put(f"{BASE}/api/products/{test_id}", json={
-            "title": "测试商品_已更新",
-            "price": 30000,
-            "confirmed": 1
-        }, timeout=5)
-        test("更新商品成功", r.status_code == 200, str(r.text[:100]))
-    except Exception as e:
-        test("更新商品成功", False, str(e))
+    def test_cors_allows_configured_origin(self):
+        response = self.client.get("/", headers={"Origin": "http://127.0.0.1:8765"})
+        self.assertEqual(response.headers.get("Access-Control-Allow-Origin"), "http://127.0.0.1:8765")
 
-# 删除商品
-if test_id:
-    try:
-        r = requests.delete(f"{BASE}/api/products/{test_id}", timeout=5)
-        test("删除商品成功", r.status_code == 200, str(r.text[:100]))
-    except Exception as e:
-        test("删除商品成功", False, str(e))
+    def test_cors_does_not_allow_unknown_origin(self):
+        response = self.client.get("/", headers={"Origin": "https://untrusted.example"})
+        self.assertIsNone(response.headers.get("Access-Control-Allow-Origin"))
 
-# ========== 3. 价格计算测试 ==========
-section("3. 价格计算引擎")
+    def test_create_update_and_delete_product(self):
+        response = self.client.post(
+            "/api/products",
+            json={"title": "Test item", "price": 1200, "status": "CLEAN"},
+        )
+        self.assertEqual(response.status_code, 201)
+        product_id = response.get_json()["id"]
 
-try:
-    r = requests.post(f"{BASE}/api/calculate_price", json={
-        "base_price": 30000,
-        "status": "CLEAN",
-        "accessories": ["box", "manual"]
-    }, timeout=5)
-    data = r.json()
-    test("价格计算成功", r.status_code == 200, str(data))
-    test("返回 low/center/high", all(k in data for k in ["low", "center", "high"]), "")
-    test("价格区间合理", data.get("low", 0) < data.get("center", 0) < data.get("high", 0), f"{data}")
-except Exception as e:
-    test("价格计算成功", False, str(e))
+        response = self.client.put(
+            f"/api/products/{product_id}",
+            json={"title": "Updated item", "price": 1500, "confirmed": True},
+        )
+        self.assertEqual(response.status_code, 200)
 
-# 边界测试：空附件
-try:
-    r = requests.post(f"{BASE}/api/calculate_price", json={
-        "base_price": 30000,
-        "status": "BRAND_NEW",
-        "accessories": []
-    }, timeout=5)
-    test("空附件不报错", r.status_code == 200, str(r.text[:100]))
-except Exception as e:
-    test("空附件不报错", False, str(e))
+        products = self.client.get("/api/products?all=1").get_json()["data"]
+        self.assertTrue(any(p["id"] == product_id and p["title"] == "Updated item" for p in products))
 
-# ========== 4. AI 功能测试 ==========
-section("4. AI 功能（DeepSeek）")
+        response = self.client.delete(f"/api/products/{product_id}")
+        self.assertEqual(response.status_code, 200)
 
-# AI 查价
-try:
-    r = requests.post(f"{BASE}/api/suggest_price", json={
-        "brand": "Panasonic",
-        "model": "DC-GF9"
-    }, timeout=30)
-    data = r.json()
-    test("AI 查价成功", r.status_code == 200, str(data)[:100])
-    test("返回 new 平台价格", "new" in data and "amazon" in data.get("new", {}), "")
-    test("返回 used 平台价格", "used" in data and "mercari" in data.get("used", {}), "")
-    test("价格是数字", isinstance(data.get("new", {}).get("amazon", {}).get("price"), (int, float)), "")
-except Exception as e:
-    test("AI 查价成功", False, str(e))
+    def test_create_product_requires_title_and_integer_price(self):
+        self.assertEqual(self.client.post("/api/products", json={}).status_code, 400)
+        self.assertEqual(
+            self.client.post("/api/products", json={"title": "Test", "price": "not-a-price"}).status_code,
+            400,
+        )
 
-# AI 生成描述
-try:
-    r = requests.post(f"{BASE}/api/generate_description", json={
-        "title": "LUMIX GF9",
-        "status": "CLEAN",
-        "works_confirmed": True,
-        "accessories": ["box", "manual"]
-    }, timeout=30)
-    data = r.json()
-    test("AI 生成描述成功", r.status_code == 200, str(data)[:100])
-    test("返回 description", "description" in data, "")
-    test("描述不为空", len(data.get("description", "")) > 50, f"长度={len(data.get('description', ''))}")
-except Exception as e:
-    test("AI 生成描述成功", False, str(e))
+    @patch.object(main.deepseek_client, "generate_description", return_value="生成された説明")
+    def test_description_endpoint_uses_client_result(self, mocked_generate):
+        response = self.client.post(
+            "/api/generate_description",
+            json={"title": "Test camera", "status": "CLEAN"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["description"], "生成された説明")
+        mocked_generate.assert_called_once()
 
-# AI 生成 checklist
-try:
-    r = requests.post(f"{BASE}/api/generate_checklist", json={
-        "title": "LUMIX GF9"
-    }, timeout=30)
-    data = r.json()
-    test("AI 生成 checklist 成功", r.status_code == 200, str(data)[:100])
-    test("返回 works_items", "works_items" in data, "")
-    test("返回 standard_accessories", "standard_accessories" in data, "")
-except Exception as e:
-    test("AI 生成 checklist 成功", False, str(e))
+    def test_missing_product_returns_not_found(self):
+        self.assertEqual(self.client.put("/api/products/999999", json={"title": "Test"}).status_code, 404)
+        self.assertEqual(self.client.delete("/api/products/999999").status_code, 404)
 
-# ========== 5. 草稿测试 ==========
-section("5. 草稿功能")
+    def test_automa_reads_only_confirmed_products(self):
+        # 未确认商品不应出现在默认列表中（Automa 只读取已确认商品）
+        created = self.client.post(
+            "/api/products", json={"title": "Unconfirmed item", "price": 1000, "status": "CLEAN"}
+        )
+        pid = created.get_json()["id"]
+        default_data = self.client.get("/api/products").get_json()["data"]
+        self.assertFalse(any(p["id"] == pid for p in default_data))
+        # 确认后应出现在默认列表中
+        self.client.put(f"/api/products/{pid}", json={"confirmed": True})
+        confirmed_data = self.client.get("/api/products").get_json()["data"]
+        self.assertTrue(any(p["id"] == pid for p in confirmed_data))
 
-try:
-    r = requests.get(f"{BASE}/api/drafts", timeout=5)
-    data = r.json()
-    test("获取草稿列表", r.status_code == 200, str(data)[:100])
-except Exception as e:
-    test("获取草稿列表", False, str(e))
+    def test_all_flag_includes_legacy_draft_records(self):
+        # 旧版本草稿（is_draft=1）默认不可见，?all=1 仍返回，避免清理后记录消失
+        conn = db.get_db()
+        conn.execute(
+            "INSERT INTO products (title, price, status, is_draft) VALUES (?, ?, ?, 1)",
+            ("Legacy draft", 500, "CLEAN"),
+        )
+        conn.commit()
+        conn.close()
+        default_data = self.client.get("/api/products").get_json()["data"]
+        self.assertFalse(any(p["title"] == "Legacy draft" for p in default_data))
+        all_data = self.client.get("/api/products?all=1").get_json()["data"]
+        self.assertTrue(any(p["title"] == "Legacy draft" for p in all_data))
 
-# ========== 6. 边界/异常测试 ==========
-section("6. 边界/异常测试")
+    @patch.object(
+        main.deepseek_client,
+        "suggest_prices",
+        return_value={
+            "new": {
+                "amazon": {"price": 52000, "low": 47000, "high": 57000},
+                "rakuten": {"price": 53000, "low": 48000, "high": 58000},
+            },
+            "used": {
+                "mercari": {"price": 32000, "low": 29000, "high": 35000},
+                "yahoo": {"price": 31000, "low": 28000, "high": 34000},
+            },
+            "new_base": 52500,
+            "used_base": 31500,
+            "accessory_options": [{"key": "acc_0", "label": "付属品なし", "list": ["box", "manual"]}],
+            "note": "テスト",
+        },
+    )
+    def test_suggest_price_returns_structured_prices(self, mocked_suggest):
+        response = self.client.post("/api/suggest_price", json={"brand": "Panasonic", "model": "DC-GF9"})
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["new"]["amazon"]["price"], 52000)
+        self.assertEqual(body["used"]["yahoo"]["price"], 31000)
+        # 附件加成按 price_engine 统一规则重算，而不是沿用模型返回值
+        self.assertEqual(body["accessory_options"][0]["bonus"], 0.07)
+        self.assertEqual(len(body["status_options"]), 3)
 
-# 空值创建
-try:
-    r = requests.post(f"{BASE}/api/products", json={}, timeout=5)
-    test("空值创建不崩溃", r.status_code in [200, 400], f"status={r.status_code}")
-except Exception as e:
-    test("空值创建不崩溃", False, str(e))
 
-# 不存在的商品更新
-try:
-    r = requests.put(f"{BASE}/api/products/99999", json={"title": "test"}, timeout=5)
-    test("更新不存在商品不崩溃", r.status_code in [200, 404], f"status={r.status_code}")
-except Exception as e:
-    test("更新不存在商品不崩溃", False, str(e))
-
-# 不存在的商品删除
-try:
-    r = requests.delete(f"{BASE}/api/products/99999", timeout=5)
-    test("删除不存在商品不崩溃", r.status_code in [200, 404], f"status={r.status_code}")
-except Exception as e:
-    test("删除不存在商品不崩溃", False, str(e))
-
-# AI 查价缺参数
-try:
-    r = requests.post(f"{BASE}/api/suggest_price", json={"brand": ""}, timeout=5)
-    test("AI 查价缺参数不崩溃", r.status_code in [200, 400], f"status={r.status_code}")
-except Exception as e:
-    test("AI 查价缺参数不崩溃", False, str(e))
-
-# ========== 7. 页面 UI 测试 ==========
-section("7. 页面 UI 元素检查")
-
-try:
-    r = requests.get(f"{BASE}/", timeout=5)
-    html = r.text
-    test("有价格诊断函数", "aiPriceSuggest" in html, "")
-    test("有批量确认函数", "batchConfirm" in html, "")
-    test("有批量删除函数", "batchDelete" in html, "")
-    test("有全选函数", "toggleSelectAll" in html, "")
-    test("有 toast 提示", "showToast" in html, "")
-    test("有创建商品函数", "diagSave" in html, "")
-except Exception as e:
-    test("页面 UI 检查", False, str(e))
-
-# ========== 总结 ==========
-section("测试总结")
-print(f"\n✅ 通过: {passed}")
-print(f"❌ 失败: {failed}")
-print(f"📊 总计: {passed + failed}")
-print(f"📈 通过率: {passed/(passed+failed)*100:.1f}%")
-
-if errors:
-    print(f"\n失败详情:")
-    for e in errors:
-        print(f"  - {e}")
-
-sys.exit(0 if failed == 0 else 1)
+if __name__ == "__main__":
+    suite = unittest.defaultTestLoader.loadTestsFromModule(__import__(__name__))
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    _TEMP_DIR.cleanup()
+    raise SystemExit(0 if result.wasSuccessful() else 1)

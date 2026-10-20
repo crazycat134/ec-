@@ -1,16 +1,18 @@
-"""DeepSeek API：根据商品信息生成日文商品描述。"""
+"""封装 DeepSeek API 调用：生成商品描述、检查清单和价格参考结构。"""
+import json
 import logging
+import re
 
 import requests
 
 log = logging.getLogger("secea")
 
-# 固定免责声明（中古品必加）
+# 生成商品描述后追加的固定说明文字。
 DISCLAIMER = "\n\n中古品のため、現状渡しとなります。状態をご理解の上、ご購入をお願いいたします。"
 
 
 def _default_price_result() -> dict:
-    """DeepSeek 未开启或调用失败时的兜底价格结构（new/used 各两平台 + 基准价）。"""
+    """返回固定兜底数据；其中价格是代码内的默认值，不是实时查询结果。"""
     return {
         "new": {
             "amazon": {"price": 30000, "low": 27000, "high": 33000},
@@ -30,9 +32,9 @@ def _default_price_result() -> dict:
     }
 
 
-# 附属品标准内部 key（与 price_engine.ACCESSORY_BONUS 一致）
+# 附件内部键名；价格加成定义在 price_engine.ACCESSORY_BONUS。
 STD_ACC_KEYS = {"box", "manual", "charger", "other", "battery", "lens_cap", "strap", "cable"}
-# 附属品日文显示名
+# 附件内部键到日文显示名称的映射。
 ACC_LABELS = {
     "charger": "充電器",
     "other": "その他付属品",
@@ -41,7 +43,7 @@ ACC_LABELS = {
     "strap": "ストラップ",
     "cable": "ケーブル",
 }
-# 二手标配（箱・説明書）：所有附属品选项自动带上，选项内容不显示
+# 价格选项默认包含箱和说明书；该规则作用于本模块生成的附件选项。
 BASE_ACCESSORIES = ["box", "manual"]
 
 
@@ -96,10 +98,10 @@ def _normalize_platform(data: dict, default_price: int) -> dict:
 
 
 def suggest_prices(cfg, brand: str, model: str) -> dict:
-    """根据品牌+型号，AI 调查各平台（Amazon/楽天 新品、メルカリ/Yahoo! 中古）实势价格。
+    """请求模型生成各平台的价格参考值；本函数不直接抓取平台商品页面，返回值应视为估算。
 
     返回：{"new": {amazon, rakuten}, "used": {mercari, yahoo}, "new_base", "used_base", "note"}
-    每个平台为 {"price", "low", "high"}；DeepSeek 未开启时返回默认估算。
+    每个平台为 {"price", "low", "high"}；未启用 API 或无法解析模型回复时，返回固定兜底值。
     """
     if not cfg.deepseek_enabled or not cfg.deepseek_api_key:
         return _default_price_result()
@@ -151,7 +153,6 @@ keys は標準キーのみ：charger=充電器, battery=バッテリー, lens_ca
         r.raise_for_status()
         data = r.json()
         resp = data["choices"][0]["message"]["content"].strip()
-        import json, re
         m = re.search(r"\{.*\}", resp, re.DOTALL)
         if m:
             raw = json.loads(m.group(0))
@@ -196,7 +197,7 @@ def generate_description(cfg, title: str, brand: str = "", model: str = "",
     if not cfg.deepseek_enabled:
         raise RuntimeError("DeepSeek 未开启（DEEPSEEK_ENABLED=false）")
 
-    # 附件转日文
+    # 将附件内部键转换为商品描述中使用的日文名称。
     accessory_map = {
         "box": "箱",
         "manual": "説明書",
@@ -210,7 +211,7 @@ def generate_description(cfg, title: str, brand: str = "", model: str = "",
     accessory_list = [accessory_map.get(a, a) for a in (accessories or [])]
     accessory_text = "・".join(accessory_list) if accessory_list else "本体のみ（付属品なし）"
 
-    # 状态转日文
+    # 将内部商品状态码转换为日文展示文本。
     status_map = {
         "BRAND_NEW": "新品、未使用",
         "ALMOST_NEW": "目立った傷や汚れなし",
@@ -221,10 +222,10 @@ def generate_description(cfg, title: str, brand: str = "", model: str = "",
     }
     status_text = status_map.get(status, status)
 
-    # 动作确认转日文
+    # 根据人工确认标记生成动作品质说明；未确认时会写为未确认/ジャンク前提。
     works_text = "動作確認済み（正常に動作することを確認済）" if works_confirmed else "動作未確認（ジャンク品・部品取り前提）"
 
-    # 默认提示词：固定模板 + 商品介绍
+    # 未传入自定义提示词时，使用内置的日文商品描述模板。
     if not custom_prompt:
         custom_prompt = (
             "あなたは日本のフリマアプリ「メルカリ」の出品文案を書くプロです。\n"
@@ -266,64 +267,7 @@ def generate_description(cfg, title: str, brand: str = "", model: str = "",
     r.raise_for_status()
     data = r.json()
     text = data["choices"][0]["message"]["content"].strip()
-    # 末尾自动加固定免责声明
+    # 在模型生成文本末尾追加固定说明。
     text = text.rstrip() + DISCLAIMER
     log.info("DeepSeek generated %d chars", len(text))
     return text
-
-
-def generate_checklist(cfg, title: str) -> dict:
-    """根据商品标题生成标准检查清单：
-    - works_items: 应该检查的动作项（电源/快门/对焦等）
-    - standard_accessories: 标准附件清单（本体/电池/充电器/说明书/箱等）
-    返回 {"works_items": [...], "standard_accessories": [...]}
-    """
-    if not cfg.deepseek_enabled:
-        raise RuntimeError("DeepSeek 未开启（DEEPSEEK_ENABLED=false）")
-
-    prompt = f"""
-あなたは中古品買取・出品のプロです。
-商品タイトル：{title}
-
-この商品について、以下2つのリストをJSON形式で生成してください。
-
-1. works_items：動作確認すべき項目（5〜8個、具体的なチェックポイント）
-   例（カメラの場合）：「電源が入るか」「シャッターが切れるか」「液晶モニターは正常か」「バッテリーは充電できるか」「レンズにカビ・クモリはないか」
-
-2. standard_accessories：標準付属品（同梱されているべきもの、4〜6個）
-   例（カメラの場合）：「本体」「バッテリー」「充電器」「説明書」「元箱」
-
-JSONのみ出力してください。説明文は不要です。
-フォーマット：
-{{"works_items": ["項目1", "項目2", ...], "standard_accessories": ["付属品1", "付属品2", ...]}}
-"""
-
-    url = f"{cfg.deepseek_base_url.rstrip('/')}/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {cfg.deepseek_api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": cfg.deepseek_model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-        "max_tokens": 400,
-    }
-
-    log.info("DeepSeek generating checklist for: %s", title)
-    r = requests.post(url, headers=headers, json=payload, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    text = data["choices"][0]["message"]["content"].strip()
-
-    # 提取 JSON
-    import json, re
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        result = json.loads(match.group())
-        return {
-            "works_items": result.get("works_items", []),
-            "standard_accessories": result.get("standard_accessories", []),
-        }
-    else:
-        return {"works_items": [], "standard_accessories": [], "raw": text}

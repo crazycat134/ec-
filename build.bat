@@ -9,7 +9,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python -c "import flask, dotenv, PIL, requests, PyInstaller" >nul 2>nul
+python -c "import flask, dotenv, requests, PyInstaller" >nul 2>nul
 if errorlevel 1 (
     echo [INFO] Installing dependencies, please wait...
     python -m pip install -r requirements.txt
@@ -37,16 +37,20 @@ if errorlevel 1 (
 )
 
 rem ---------- portable runtime files ----------
+if not exist "dist\SecondhandECAgent" mkdir "dist\SecondhandECAgent"
+copy "dist\SecondhandECAgent.exe" "dist\SecondhandECAgent\SecondhandECAgent.exe" >nul
+if errorlevel 1 (
+    echo [ERROR] Could not copy SecondhandECAgent.exe into the portable folder.
+    pause
+    exit /b 1
+)
 if not exist "dist\SecondhandECAgent\config" mkdir "dist\SecondhandECAgent\config"
 copy "config\secrets.env.example" "dist\SecondhandECAgent\config\secrets.env.example" >nul
 if not exist "dist\SecondhandECAgent\data" mkdir "dist\SecondhandECAgent\data"
-if not exist "dist\SecondhandECAgent\images\imported" mkdir "dist\SecondhandECAgent\images\imported"
 if not exist "dist\SecondhandECAgent\logs" mkdir "dist\SecondhandECAgent\logs"
 copy "start.bat" "dist\SecondhandECAgent\start.bat" >nul
 copy "README_*.txt" "dist\SecondhandECAgent\" >nul
 copy "README_*.md" "dist\SecondhandECAgent\" >nul
-copy "rename_photos.py" "dist\SecondhandECAgent\rename_photos.py" >nul
-copy "rename_photos.bat" "dist\SecondhandECAgent\rename_photos.bat" >nul
 copy "requirements.txt" "dist\SecondhandECAgent\requirements.txt" >nul
 
 echo.

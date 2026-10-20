@@ -1,4 +1,4 @@
-"""SQLite 初始化与连接：data/app.db，photos 与 products 两张表。"""
+"""创建 SQLite 连接并维护商品、照片数据表。数据库文件位于 data/app.db。"""
 import sqlite3
 from pathlib import Path
 
@@ -33,14 +33,14 @@ CREATE TABLE IF NOT EXISTS products (
 
 
 def get_db():
-    """返回可像字典访问的 SQLite 连接（sqlite3.Row）。调用方负责关闭。"""
+    """返回行结果可按列名读取的 SQLite 连接；连接使用方负责关闭。"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """初始化数据库文件与表结构，重复调用安全；旧库自动补列。"""
+    """确保数据库目录和表存在，并为旧版本数据库补齐新增字段。"""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = get_db()
     try:
@@ -52,7 +52,7 @@ def init_db():
 
 
 def _migrate(conn):
-    """为旧库补充新列与索引（SQLite 的 ADD COLUMN 需逐个判断）。"""
+    """按当前代码需要为旧数据库补列，并创建商品编号唯一索引。"""
     photo_cols = {r["name"] for r in conn.execute("PRAGMA table_info(photos)")}
     if "product_no" not in photo_cols:
         conn.execute("ALTER TABLE photos ADD COLUMN product_no INTEGER")

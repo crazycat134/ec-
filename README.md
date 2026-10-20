@@ -1,141 +1,44 @@
 # Secondhand EC Agent V3
 
-> 个人卖家二手商品上架辅助系统 — 拍照导入 → AI 生成描述 → Automa 半自动上架 Mercari
+本项目是本地二手商品上架工作流：输入品牌和型号 → AI 估算新品/中古推荐价 → 生成日文商品描述 → 人工确认后由 Automa 读取并填写 Mercari 页面。使用 Python/Flask 提供网页和 API，SQLite 保存商品资料，DeepSeek 可选地辅助价格诊断和描述生成。
 
-## ✨ 功能特性
+## 当前功能
+- AI 价格诊断：输入品牌和型号，参考 Amazon・楽天・メルカリ・Yahoo! 的行情估算新品/中古推荐价，保存为商品资料
+- 可选 DeepSeek AI：生成日文商品描述（人工确认后保存）
+- 本地商品资料新增、编辑、删除、分类和确认状态管理
+- 本地 API 供 Automa 读取已确认商品并自动上架
+- Windows 源码启动与便携版打包
 
-- 📷 **相机自动导入**：Lumix GF9 USB 连接后自动扫描 DCIM、去重、压缩
-- 💰 **AI 价格诊断**：输入品牌+型号，AI 查 Amazon/楽天/メルカリ/Yahoo! 多平台价格，状态/附属品联动滑块定价
-- 📝 **AI 商品描述**：DeepSeek 自动生成日文商品说明文（含商品介绍/状态/附件/动作确认）
-- ✅ **动作确认 Checklist**：AI 生成标准检查清单，逐项打勾
-- 📋 **批量操作**：多选商品，批量确认/删除
-- 🤖 **Automa 集成**：本地 API 提供商品数据，Automa 浏览器扩展半自动填表
+## 当前版本不包含
+- USB 相机或存储盘自动扫描、DCIM 照片导入
+- 按文件名分组照片并自动创建草稿
+- `rename_photos.bat` 批量重命名工具
+- 直接抓取电商平台实时价格或通过 Mercari 官方 API 发布商品
 
-## 🏗️ 技术栈
+相机导入和批量重命名已从当前版本移除。数据库中已有的照片关联不会因这次调整而自动删除，但当前版本没有新的相机导入入口。
 
-| 组件 | 技术 |
-|---|---|
-| 后端 | Python 3.11+ / Flask |
-| 数据库 | SQLite |
-| 图片处理 | Pillow |
-| AI | DeepSeek API |
-| 浏览器自动化 | Automa (Chrome 扩展) |
+## 环境与启动
+建议使用 Windows + Python 3.11/3.12。双击 `start.bat`，首次运行会从 `config/secrets.env.example` 创建 `config/secrets.env`，然后按提示再次启动。AI 为可选功能；如需使用，请设置 `DEEPSEEK_ENABLED=true` 并填写 `DEEPSEEK_API_KEY`。默认页面地址为 `http://127.0.0.1:8765`。
 
-## 📁 项目结构
+## 主要 API
 
-```
-SecondhandECAgent/
-├── app/
-│   ├── main.py              # Flask 主程序（所有 API）
-│   ├── config.py             # 读取配置
-│   ├── db.py                # SQLite 数据库
-│   ├── deepseek_client.py  # DeepSeek AI 客户端
-│   ├── camera_import.py      # 相机照片导入
-│   ├── price_engine.py       # 价格计算引擎
-│   └── templates/
-│       └── index.html        # 状态页（Web UI）
-├── config/
-│   ├── secrets.env.example   # 配置模板
-│   └── secrets.env          # 你的密钥（不要上传）
-├── data/
-│   └── app.db               # SQLite 数据库
-├── images/
-│   └── imported/            # 导入的照片
-├── requirements.txt
-├── run.py                   # 启动入口
-└── test_system.py           # 系统测试脚本
-```
-
-## 🚀 快速开始
-
-### 1. 环境准备
-
-```bash
-# 安装 Python 3.11 或 3.12（不要用 3.13）
-# 安装依赖
-pip install -r requirements.txt
-```
-
-### 2. 配置密钥
-
-```bash
-# 复制模板
-cp config/secrets.env.example config/secrets.env
-
-# 编辑 config/secrets.env，填入你的密钥
-```
-
-需要配置的内容：
-
-#### DeepSeek API（AI 功能，可选）
-- 注册 https://platform.deepseek.com
-- 创建 API Key
-- `DEEPSEEK_ENABLED=true`
-- `DEEPSEEK_API_KEY=你的key`
-
-### 3. 启动
-
-```bash
-python run.py
-```
-
-打开浏览器访问：http://127.0.0.1:8765
-
-## 📡 API 接口
-
-| 接口 | 方法 | 说明 |
+| 方法 | 路径 | 作用 |
 |---|---|---|
-| `/api/products` | GET | 获取已确认商品列表（供 Automa 读取） |
-| `/api/products?all=1` | GET | 获取所有商品（状态页用） |
-| `/api/products` | POST | 创建商品 |
-| `/api/products/<id>` | PUT | 更新商品 |
-| `/api/products/<id>` | DELETE | 删除商品 |
-| `/api/drafts` | GET | 获取草稿列表 |
-| `/api/calculate_price` | POST | 计算推荐价格 |
-| `/api/suggest_price` | POST | AI 查各平台价格（新品/中古 + 状态/附属品选项） |
-| `/api/generate_description` | POST | AI 生成商品描述 |
-| `/api/generate_checklist` | POST | AI 生成检查清单 |
-| `/api/import_photos` | POST | 导入相机照片 |
+| GET | `/` | 商品管理页面 |
+| GET | `/api/products` | 获取已确认的正式商品 |
+| GET | `/api/products?all=1` | 获取全部商品记录（含旧版本草稿） |
+| POST | `/api/products` | 新增商品 |
+| PUT | `/api/products/<id>` | 更新商品 |
+| DELETE | `/api/products/<id>` | 删除商品记录 |
+| POST | `/api/suggest_price` | AI 价格诊断（品牌+型号 → 四平台参考价） |
+| POST | `/api/generate_description` | AI 生成日文商品描述 |
 
-## 🤖 Automa 工作流
+当前版本不再提供 `/api/import_photos`、`/api/drafts`、`/api/calculate_price` 或 `/api/generate_checklist`。商品接口返回 `{"data": [...]}`，并包含已有照片路径（如数据库中存在关联）。
 
-Automa 是 Chrome/Edge 的浏览器自动化扩展。
+## 测试与打包
+运行 `python test_system.py` 执行轻量测试。在 Windows 开发环境中运行 `build.bat`，便携版输出到 `dist/SecondhandECAgent/`。本次修改未在 Windows 实机运行打包或验证 Mercari 页面自动化。
 
-### 工作流结构
-```
-[HTTP 请求] GET http://127.0.0.1:8765/api/products
-    ↓
-[循环数据] 遍历商品列表
-    ↓
-[新建标签页] https://jp.mercari.com/sell
-    ↓
-[表单] 填写标题 / 价格 / 描述
-    ↓
-[点击] 选择分类 / 状态
-    ↓
-[上传文件] 上传商品图片
-    ↓
-[延迟] 随机 2-3 秒
-    ↓
-（人工确认后提交）
-```
-
-### ⚠️ 风险提示
-- Mercari 禁止自动化批量操作，有账号风险
-- 必须人工确认后提交，不要无人值守
-- 每小时最多 2-3 件，随机间隔
-
-## 🧪 测试
-
-```bash
-python test_system.py
-```
-
-## 📝 License
-
-个人项目，仅供学习参考。使用风险自负。
-
-## 🙏 致谢
-
-- [DeepSeek](https://www.deepseek.com/) - AI 大模型
-- [Automa](https://www.automa.site/) - 浏览器自动化
+## 注意事项
+- Automa 的网页操作可能受到 Mercari 平台规则限制；发布前应人工核对并确认。
+- 不要把真实 API Key 提交到 GitHub。
+- 本地数据库位于 `data/app.db`，日志位于 `logs/`。

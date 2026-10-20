@@ -43,7 +43,6 @@
   .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; }
   .badge-confirmed { background: #d1fae5; color: #065f46; }
   .badge-pending { background: #fef3c7; color: #92400e; }
-  .badge-draft { background: #e0e7ff; color: #3730a3; }
 
   /* 右侧编辑面板 */
   .detail { flex: 1; overflow-y: auto; padding: 20px; background: #f9fafb; }
@@ -70,13 +69,6 @@
   .btn-danger { color: #dc2626; border-color: #fecaca; }
   .btn-sm { padding: 4px 10px; font-size: 13px; }
 
-  .checklist-box { margin-top: 16px; padding: 12px; background: #f0f9ff; border-radius: 8px; font-size: 13px; line-height: 1.8; }
-  .checklist-box b { color: #1e40af; }
-
-  /* 草稿 tab */
-  .tab-bar { display: flex; border-bottom: 1px solid #e5e7eb; }
-  .tab { padding: 10px 16px; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; }
-  .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
 
   /* 移动端返回按钮（默认隐藏，窄屏显示） */
   .mobile-back { display: none !important; }
@@ -138,7 +130,7 @@
 <div class="header">
   <h1>Secondhand EC Agent V3</h1>
   <div style="display:flex; gap:12px; align-items:center;">
-    <button class="btn btn-primary btn-sm" onclick="showAddForm()">+ 添加商品</button>
+    <button class="btn btn-primary btn-sm" onclick="showAddForm()">＋ 新規診断</button>
     <div class="status ok">● 就绪</div>
   </div>
 </div>
@@ -147,16 +139,11 @@
   <div class="stat"><div class="num" id="stat-total">0</div><div class="label">正式商品</div></div>
   <div class="stat"><div class="num" id="stat-confirmed">0</div><div class="label">已确认</div></div>
   <div class="stat"><div class="num" id="stat-unconfirmed">0</div><div class="label">待确认</div></div>
-  <div class="stat"><div class="num" id="stat-drafts">0</div><div class="label">草稿</div></div>
 </div>
 
 <div class="main">
   <!-- 左侧列表 -->
   <div class="sidebar">
-    <div class="tab-bar">
-      <div class="tab active" data-tab="products">商品</div>
-      <div class="tab" data-tab="drafts">草稿</div>
-    </div>
     <div class="toolbar">
       <input type="text" id="search" placeholder="搜索标题...">
       <div class="filters">
@@ -203,10 +190,8 @@ const STATUS_LABELS = {
 };
 
 let allProducts = [];
-let allDrafts = [];
 let selectedId = null;
 let selectedIds = new Set(); // 多选
-let currentTab = 'products';
 
 // ===== 移动端视图切换（窄屏：列表 ⇄ 详情） =====
 function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
@@ -223,11 +208,10 @@ function toggleSelect(id, checked) {
 }
 
 function toggleSelectAll(checked) {
-  const list = currentTab === 'products' ? allProducts : allDrafts;
   if (checked) {
-    list.forEach(p => selectedIds.add(p.id));
+    allProducts.forEach(p => selectedIds.add(p.id));
   } else {
-    list.forEach(p => selectedIds.delete(p.id));
+    allProducts.forEach(p => selectedIds.delete(p.id));
   }
   renderList();
 }
@@ -321,20 +305,11 @@ async function loadList() {
   updateStats();
 }
 
-async function loadDrafts() {
-  const r = await fetch('/api/drafts');
-  const j = await r.json();
-  allDrafts = j.data || [];
-  updateStats();
-  if (currentTab === 'drafts') renderList();
-}
-
 function updateStats() {
   const confirmed = allProducts.filter(p => p.confirmed).length;
   document.getElementById('stat-total').textContent = allProducts.length;
   document.getElementById('stat-confirmed').textContent = confirmed;
   document.getElementById('stat-unconfirmed').textContent = allProducts.length - confirmed;
-  document.getElementById('stat-drafts').textContent = allDrafts.length;
 }
 
 function renderList() {
@@ -342,14 +317,10 @@ function renderList() {
   const fStatus = document.getElementById('filter-status').value;
   const fConfirmed = document.getElementById('filter-confirmed').value;
 
-  let list = currentTab === 'products' ? allProducts : allDrafts;
-
-  let rows = list.filter(p => {
+  let rows = allProducts.filter(p => {
     if (search && !p.title.toLowerCase().includes(search)) return false;
-    if (currentTab === 'products') {
-      if (fStatus && p.status !== fStatus) return false;
-      if (fConfirmed !== '' && String(p.confirmed ? 1 : 0) !== fConfirmed) return false;
-    }
+    if (fStatus && p.status !== fStatus) return false;
+    if (fConfirmed !== '' && String(p.confirmed ? 1 : 0) !== fConfirmed) return false;
     return true;
   });
 
@@ -361,17 +332,9 @@ function renderList() {
 
   container.innerHTML = rows.map(p => {
     const thumb = (p.images || [])[0] || (p.image_paths || [])[0];
-    let stage;
-    if (currentTab === 'drafts') stage = 'draft';
-    else if (p.confirmed) stage = 'confirmed';
-    else if (p.works_confirmed) stage = 'ready';
-    else stage = 'testing';
-    const stageBadge = {
-      draft: '<span class="badge badge-draft">草稿</span>',
-      testing: '<span class="badge badge-pending">待测试</span>',
-      ready: '<span class="badge badge-confirmed">待确认上架</span>',
-      confirmed: '<span class="badge" style="background:#dcfce7; color:#166534;">✓ 已确认</span>',
-    }[stage];
+    const stageBadge = p.confirmed
+      ? '<span class="badge" style="background:#dcfce7; color:#166534;">✓ 已确认</span>'
+      : '<span class="badge badge-pending">待确认</span>';
     const checked = selectedIds.has(p.id) ? 'checked' : '';
     return `
       <div class="product-item ${selectedId === p.id ? 'active' : ''}" data-id="${p.id}">
@@ -419,8 +382,7 @@ function renderDetail() {
   }
   showMobileDetail();
 
-  const list = currentTab === 'products' ? allProducts : allDrafts;
-  const p = list.find(x => x.id === selectedId);
+  const p = allProducts.find(x => x.id === selectedId);
   if (!p) {
     detail.innerHTML = '<div class="empty"><p>商品不存在</p></div>';
     return;
@@ -466,32 +428,16 @@ function renderDetail() {
         </div>
       </div>
 
-      ${currentTab === 'products' ? `
       <div class="form-group">
         <div class="checkbox-row">
           <input type="checkbox" id="f-confirmed" ${p.confirmed ? 'checked' : ''}>
           <label for="f-confirmed">已确认（Automa 可读取上架）</label>
         </div>
       </div>
-      ` : ''}
-
-      <div class="checklist-box" id="checklist-box" style="display:none;"></div>
-
-      <!-- 定价助手 -->
-      <div style="margin-top:16px; padding:12px; background:#fefce8; border-radius:8px; font-size:13px;">
-        <b>💰 定价助手</b>
-        <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
-          <input type="number" id="base-price" placeholder="全新品価格" style="width:120px; padding:4px 8px; border:1px solid #d1d5db; border-radius:4px;">
-          <button class="btn btn-sm" onclick="calcPrice()">計算</button>
-          <span id="price-result" style="margin-left:8px;"></span>
-        </div>
-      </div>
 
       <div class="btn-row">
         <button class="btn btn-primary" onclick="save()">保存</button>
         <button class="btn" onclick="aiGen()">AI 生成描述</button>
-        <button class="btn" onclick="aiChecklist()">AI 分析 checklist</button>
-        ${currentTab === 'drafts' ? '<button class="btn" onclick="convertDraft()">转正式</button>' : ''}
         <button class="btn btn-danger" onclick="del()">删除</button>
       </div>
     </div>
@@ -741,34 +687,11 @@ async function diagSave() {
   const j = await r.json();
   if (j.id) {
     selectedId = j.id;
-    currentTab = 'products';
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'products'));
     loadList();
     renderDetail();
     showToast(`保存しました（¥${price.toLocaleString()}）`);
   } else {
     showToast('保存失敗：' + (j.error || ''));
-  }
-}
-
-async function doAdd() {
-  const body = {
-    title: document.getElementById('add-title').value,
-    price: Number(document.getElementById('add-price').value),
-    status: document.getElementById('add-status').value,
-    categories: document.getElementById('add-categories').value,
-  };
-  const r = await fetch('/api/products', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const j = await r.json();
-  if (j.id) {
-    selectedId = j.id;
-    loadList();
-    renderDetail();
-  } else {
-    alert('添加失败：' + (j.error || ''));
   }
 }
 
@@ -782,9 +705,7 @@ async function save() {
     works_confirmed: document.getElementById('f-works').checked,
     accessories: getAccessories(),
   };
-  if (currentTab === 'products') {
-    body.confirmed = document.getElementById('f-confirmed').checked;
-  }
+  body.confirmed = document.getElementById('f-confirmed').checked;
   const resp = await fetch('/api/products/' + selectedId, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -792,20 +713,6 @@ async function save() {
   const jj = await resp.json();
   alert(jj.ok ? '已保存' : '保存失败：' + (jj.error || ''));
   loadList();
-}
-
-async function calcPrice() {
-  const base = Number(document.getElementById('base-price').value);
-  if (!base) { showToast('请输入全新品价格'); return; }
-  const status = document.getElementById('f-status').value;
-  const accessories = getAccessories();
-  const r = await fetch('/api/calculate_price', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base_price: base, status, accessories })
-  });
-  const j = await r.json();
-  document.getElementById('price-result').innerHTML =
-    `推奨価格：<b>¥${j.center.toLocaleString()}</b>（¥${j.low.toLocaleString()}〜¥${j.high.toLocaleString()}）`;
 }
 
 function showToast(msg) {
@@ -840,74 +747,12 @@ async function aiGen() {
   }
 }
 
-function checkAllWorks() {
-  const box = document.getElementById('checklist-box');
-  if (!box) return;
-  const allChk = box.querySelectorAll('.chk-item');
-  const worksChk = document.getElementById('f-works');
-  if (!worksChk) return;
-  // 检查动作确认项（前半部分）是否全部勾选
-  const worksItems = box.querySelectorAll('label');
-  let worksCount = 0;
-  let worksChecked = 0;
-  let inAccessories = false;
-  worksItems.forEach(label => {
-    if (label.textContent.includes('標準付属品')) { inAccessories = true; return; }
-    if (!inAccessories) {
-      worksCount++;
-      if (label.querySelector('input').checked) worksChecked++;
-    }
-  });
-  if (worksCount > 0 && worksCount === worksChecked) {
-    worksChk.checked = true;
-  }
-}
-
-async function aiChecklist() {
-  const title = document.getElementById('detail').querySelector('h2').textContent;
-  const r = await fetch('/api/generate_checklist', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title })
-  });
-  const j = await r.json();
-  const box = document.getElementById('checklist-box');
-  box.style.display = 'block';
-  box.innerHTML = `
-    <b>動作確認チェックリスト：</b><br>
-    ${(j.works_items || []).map(i => `<label style="display:block; padding:2px 0; cursor:pointer;"><input type="checkbox" class="chk-item" onchange="checkAllWorks()"> ${esc(i)}</label>`).join('')}
-    <br><b>標準付属品：</b><br>
-    ${(j.standard_accessories || []).map(i => `<label style="display:block; padding:2px 0; cursor:pointer;"><input type="checkbox" class="chk-item"> ${esc(i)}</label>`).join('')}
-  `;
-}
-
 async function del() {
   if (!confirm('删除此商品？')) return;
   await fetch('/api/products/' + selectedId, { method: 'DELETE' });
   selectedId = null;
   renderDetail();
   loadList();
-  loadDrafts();
-}
-
-async function convertDraft() {
-  const body = {
-    title: document.getElementById('detail').querySelector('h2').textContent,
-    price: Number(document.getElementById('f-price').value),
-    status: document.getElementById('f-status').value,
-    description: document.getElementById('f-description').value,
-    categories: document.getElementById('f-categories').value,
-    works_confirmed: document.getElementById('f-works').checked,
-    accessories: getAccessories(),
-  };
-  await fetch('/api/products/' + selectedId, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  alert('已转正式商品');
-  currentTab = 'products';
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'products'));
-  loadList();
-  loadDrafts();
 }
 
 // 搜索/筛选
@@ -915,19 +760,7 @@ document.getElementById('search').addEventListener('input', renderList);
 document.getElementById('filter-status').addEventListener('change', renderList);
 document.getElementById('filter-confirmed').addEventListener('change', renderList);
 
-// Tab 切换
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    currentTab = tab.dataset.tab;
-    selectedId = null;
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
-    renderList();
-    renderDetail();
-  });
-});
-
 loadList();
-loadDrafts();
 </script>
 </body>
 </html>

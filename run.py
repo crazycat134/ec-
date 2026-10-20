@@ -1,4 +1,4 @@
-"""项目启动入口：python run.py"""
+"""启动本地 Flask 服务：python run.py"""
 import sys
 from pathlib import Path
 
